@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citanext – Sistema de Citas Inteligente para Emprendedores y PYMEs</title>
+    
+    <!-- Font Awesome 6 (iconos) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #1a1a2e;
+            background: #fff;
+            line-height: 1.6;
+        }
+
+        /* ========== NAVEGACIÓN ========== */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 18px 60px;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 1px 20px rgba(0,0,0,0.05);
+        }
+        .nav-logo {
+            font-size: 1.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        .btn-nav {
+            padding: 10px 22px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        .btn-login {
+            color: #4f46e5;
+            border: 2px solid #4f46e5;
+            background: transparent;
+        }
+        .btn-login:hover {
+            background: #eef2ff;
+        }
+        .btn-register {
+            background: #4f46e5;
+            color: #fff;
+            border: 2px solid #4f46e5;
+        }
+        .btn-register:hover {
+            background: #4338ca;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(79, 70, 229, 0.3);
+        }
+
+        /* ========== HERO ========== */
+        .hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 140px 60px 80px;
+            background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 50%, #e0e7ff 100%);
+            min-height: 90vh;
+        }
+        .hero-content {
+            max-width: 600px;
+        }
+        .hero-badge {
+            display: inline-block;
+            background: #ddd6fe;
+            color: #4f46e5;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 20px;
+        }
+        .hero h1 {
+            font-size: 3.2rem;
+            font-weight: 900;
+            line-height: 1.2;
+            margin-bottom: 20px;
+        }
+        .hero h1 span {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .hero p {
+            font-size: 1.15rem;
+            color: #4b5563;
+            margin-bottom: 35px;
+        }
+        .hero-buttons {
+            display: flex;
+            gap: 15px;
+        }
+        .btn-primary {
+            padding: 16px 35px;
+            background: #4f46e5;
+            color: #fff;
+            border: none;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+        .btn-primary:hover {
+            background: #4338ca;
+            transform: translateY(-3px);
+            box-shadow: 0 15px 30px rgba(79, 70, 229, 0.3);
+        }
+        .btn-outline {
+            padding: 16px 35px;
+            background: #fff;
+            color: #4f46e5;
+            border: 2px solid #4f46e5;
+            border-radius: 30px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        .btn-outline:hover {
+            background: #eef2ff;
+        }
+        .hero-image {
+            max-width: 500px;
+        }
+        .hero-image img {
+            width: 100%;
+            border-radius: 20px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.1);
+        }
+
+        /* ========== SECCIONES ========== */
+        .section {
+            padding: 90px 60px;
+        }
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 800;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .section-subtitle {
+            font-size: 1.1rem;
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 60px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* ========== CARACTERÍSTICAS ========== */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .feature-card {
+            background: #fff;
+            padding: 35px 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            border: 1px solid #f3f4f6;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(79, 70, 229, 0.1);
+            border-color: #c7d2fe;
+        }
+        .feature-icon {
+            font-size: 2.5rem;
+            color: #4f46e5;
+            margin-bottom: 20px;
+        }
+        .feature-card h3 {
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        .feature-card p {
+            color: #6b7280;
+            font-size: 0.95rem;
+        }
+
+        /* ========== PRECIOS ========== */
+        .pricing-card {
+            max-width: 440px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 24px;
+            padding: 45px 35px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+            border: 2px solid #4f46e5;
+            position: relative;
+        }
+        .pricing-badge {
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4f46e5;
+            color: #fff;
+            padding: 6px 22px;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .pricing-amount {
+            font-size: 3.5rem;
+            font-weight: 900;
+            margin: 20px 0 5px;
+        }
+        .pricing-amount span {
+            font-size: 1.5rem;
+            color: #6b7280;
+        }
+        .pricing-period {
+            color: #6b7280;
+            margin-bottom: 30px;
+        }
+        .pricing-features {
+            list-style: none;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        .pricing-features li {
+            padding: 10px 0;
+            color: #374151;
+        }
+        .pricing-features li i {
+            color: #10b981;
+            margin-right: 10px;
+        }
+
+        /* ========== TESTIMONIOS ========== */
+        .testimonials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .testimonial-card {
+            background: #f9fafb;
+            padding: 35px;
+            border-radius: 20px;
+            border: 1px solid #f3f4f6;
+        }
+        .testimonial-card p {
+            font-style: italic;
+            color: #374151;
+            margin-bottom: 15px;
+        }
+        .testimonial-card .author {
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+        .testimonial-card .author span {
+            color: #6b7280;
+            font-weight: 400;
+            font-size: 0.9rem;
+        }
+
+        /* ========== FAQ ========== */
+        .faq-item {
+            max-width: 700px;
+            margin: 0 auto 20px;
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .faq-question {
+            width: 100%;
+            padding: 22px 30px;
+            background: #f9fafb;
+            border: none;
+            font-size: 1.05rem;
+            font-weight: 600;
+            text-align: left;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .faq-question:hover {
+            background: #f3f4f6;
+        }
+        .faq-answer {
+            padding: 0 30px 22px;
+            color: #4b5563;
+            display: none;
+        }
+        .faq-answer.show {
+            display: block;
+        }
+
+        /* ========== CTA ========== */
+        .cta {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #fff;
+            text-align: center;
+        }
+        .cta h2 {
+            color: #fff;
+        }
+        .cta .section-subtitle {
+            color: #c7d2fe;
+        }
+        .cta .btn-primary {
+            background: #fff;
+            color: #4f46e5;
+            margin-top: 20px;
+        }
+        .cta .btn-primary:hover {
+            background: #eef2ff;
+        }
+
+        /* ========== FOOTER ========== */
+        footer {
+            background: #111827;
+            color: #9ca3af;
+            text-align: center;
+            padding: 30px;
+            font-size: 0.9rem;
+        }
+
+        /* ========== RESPONSIVE ========== */
+        @media (max-width: 900px) {
+            .hero {
+                flex-direction: column;
+                padding: 120px 30px 50px;
+                text-align: center;
+            }
+            .hero h1 {
+                font-size: 2.4rem;
+            }
+            .hero-image {
+                margin-top: 40px;
+                max-width: 350px;
+            }
+            .navbar {
+                padding: 15px 25px;
+            }
+            .section {
+                padding: 60px 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ========== NAVEGACIÓN ========== -->
+    <nav class="navbar">
+        <div class="nav-logo">📅 Citanext</div>
+        <div class="nav-buttons">
+            <a href="auth.html" class="btn-nav btn-login">Iniciar Sesión</a>
+            <a href="auth.html" class="btn-nav btn-register">Registrarse Gratis</a>
+        </div>
+    </nav>
+
+    <!-- ========== HERO ========== -->
+    <header class="hero">
+        <div class="hero-content">
+            <span class="hero-badge">🔥 Para emprendedores y PYMEs</span>
+            <h1>Gestiona tus citas <span>sin complicaciones</span></h1>
+            <p>
+                El sistema de citas más fácil de usar para estéticas, 
+                vendedores de bienes raíces, agencias de autos y más. 
+                Organiza tu agenda, recibe notificaciones por WhatsApp y 
+                permite que tus clientes reserven en línea las 24 horas.
+            </p>
+            <div class="hero-buttons">
+                <a href="auth.html" class="btn-primary">Comenzar ahora</a>
+                <a href="#como-funciona" class="btn-outline">Ver cómo funciona</a>
+            </div>
+        </div>
+        <div class="hero-image">
+            <!-- Imagen: dashboard de ejemplo (cámbiala por una real) -->
+            <img src="https://placehold.co/500x400/eef2ff/4f46e5?text=Dashboard+Citanext" 
+                 alt="Dashboard de Citanext">
+        </div>
+    </header>
+
+    <!-- ========== CARACTERÍSTICAS ========== -->
+    <section class="section" id="como-funciona">
+        <h2 class="section-title">Todo lo que necesitas en un solo lugar</h2>
+        <p class="section-subtitle">
+            Diseñado para que cualquier persona pueda usarlo, aunque no tenga experiencia técnica.
+        </p>
+        <div class="features-grid">
+            <div class="feature-card">
+                <i class="fa-solid fa-calendar-check feature-icon"></i>
+                <h3>Calendario interactivo</h3>
+                <p>
+                    Visualiza todas tus citas en un calendario grande y fácil de usar. 
+                    Agrega, edita o elimina citas con un solo clic.
+                </p>
+            </div>
+            <div class="feature-card">
+                <i class="fa-brands fa-whatsapp feature-icon"></i>
+                <h3>Notificaciones por WhatsApp</h3>
+                <p>
+                    Recibe cada cita directamente en tu WhatsApp. 
+                    También puedes enviar recordatorios automáticos a tus clientes.
+                </p>
+            </div>
+            <div class="feature-card">
+                <i class="fa-solid fa-paint-brush feature-icon"></i>
+                <h3>Personalización completa</h3>
+                <p>
+                    Sube tu logo, foto de portada, describe tus servicios y configura 
+                    los horarios de tus empleados. Tu negocio, tu estilo.
+                </p>
+            </div>
+            <div class="feature-card">
+                <i class="fa-solid fa-globe feature-icon"></i>
+                <h3>Reservas en línea 24/7</h3>
+                <p>
+                    Tus clientes pueden agendar sus citas desde cualquier dispositivo, 
+                    a cualquier hora, sin necesidad de llamarte.
+                </p>
+            </div>
+            <div class="feature-card">
+                <i class="fa-solid fa-user-tie feature-icon"></i>
+                <h3>Gestión de empleados</h3>
+                <p>
+                    Registra a tu equipo y asigna citas a cada persona. 
+                    Ideal para negocios con varios colaboradores.
+                </p>
+            </div>
+            <div class="feature-card">
+                <i class="fa-solid fa-chart-line feature-icon"></i>
+                <h3>Estadísticas y control</h3>
+                <p>
+                    Visualiza tus próximas citas, controla tu agenda diaria y 
+                    toma decisiones con información clara.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== PRECIOS ========== -->
+    <section class="section" style="background: #f9fafb;">
+        <h2 class="section-title">Un precio, todo incluido</h2>
+        <p class="section-subtitle">
+            Sin costos ocultos, sin sorpresas. Paga una sola suscripción mensual y accede a todas las funcionalidades.
+        </p>
+
+        <div class="pricing-card">
+            <span class="pricing-badge">Plan Emprendedor</span>
+            <div class="pricing-amount">
+                <span>$</span>49.99
+            </div>
+            <p class="pricing-period">MXN / mes</p>
+            <ul class="pricing-features">
+                <li><i class="fa-solid fa-circle-check"></i> Registro de negocio con perfil personalizado</li>
+                <li><i class="fa-solid fa-circle-check"></i> Dashboard con logo, portada y descripción</li>
+                <li><i class="fa-solid fa-circle-check"></i> Calendario interactivo (crear, editar, eliminar citas)</li>
+                <li><i class="fa-solid fa-circle-check"></i> Gestión de servicios y empleados</li>
+                <li><i class="fa-solid fa-circle-check"></i> Página pública de reservas (compartible)</li>
+                <li><i class="fa-solid fa-circle-check"></i> Notificaciones por WhatsApp</li>
+                <li><i class="fa-solid fa-circle-check"></i> Hosting y dominio incluidos</li>
+                <li><i class="fa-solid fa-circle-check"></i> Soporte técnico prioritario</li>
+            </ul>
+            <a href="auth.html" class="btn-primary" style="width: 100%;">Comenzar ahora</a>
+        </div>
+    </section>
+
+    <!-- ========== TESTIMONIOS ========== -->
+    <section class="section">
+        <h2 class="section-title">Emprendedores que ya usan Citanext</h2>
+        <p class="section-subtitle">
+            Así opinan quienes ya transformaron la forma de agendar sus citas.
+        </p>
+        <div class="testimonials-grid">
+            <div class="testimonial-card">
+                <p>
+                    "Antes mis clientas tenían que llamarme para agendar. Ahora lo hacen 
+                    solitas desde mi página de reservas. ¡He ahorrado muchísimo tiempo!"
+                </p>
+                <div class="author">
+                    María G.<br>
+                    <span>Dueña de Estética Bella</span>
+                </div>
+            </div>
+            <div class="testimonial-card">
+                <p>
+                    "Soy agente de bienes raíces y necesitaba algo simple. Citanext me 
+                    permite organizar mis visitas a propiedades sin enredos. Lo recomiendo."
+                </p>
+                <div class="author">
+                    Carlos R.<br>
+                    <span>Agente inmobiliario</span>
+                </div>
+            </div>
+            <div class="testimonial-card">
+                <p>
+                    "Mis clientes agenda fácilmente citas para ver autos. Además, 
+                    recibo las notificaciones en WhatsApp. ¡Justo lo que necesitaba!"
+                </p>
+                <div class="author">
+                    Juan M.<br>
+                    <span>Vendedor de autos</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== FAQ ========== -->
+    <section class="section" style="background: #f9fafb;">
+        <h2 class="section-title">Preguntas frecuentes</h2>
+        <p class="section-subtitle">
+            Resuelve tus dudas antes de empezar.
+        </p>
+        <div class="faq-item">
+            <button class="faq-question">
+                ¿Necesito saber de programación para usar Citanext?
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-answer">
+                <p>No. Citanext está diseñado para personas sin conocimientos técnicos. Solo te registras, configuras tu perfil y listo. Todo se hace desde un panel visual muy fácil de usar.</p>
+            </div>
+        </div>
+        <div class="faq-item">
+            <button class="faq-question">
+                ¿Puedo probar antes de pagar?
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-answer">
+                <p>Sí. Te ofrecemos 7 días de prueba gratis. Si no te convence, cancelas sin costo. No te pedimos tarjeta de crédito para empezar.</p>
+            </div>
+        </div>
+        <div class="faq-item">
+            <button class="faq-question">
+                ¿Cómo recibo las notificaciones de citas?
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <div class="faq-answer">
+                <p>Las citas te llegan directamente a tu WhatsApp. Solo debes configurar tu número en el dashboard y automáticamente recibirás un mensaje cada vez que alguien agende.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ========== CTA ========== -->
+    <section class="section cta">
+        <h2 class="section-title">Empieza hoy mismo</h2>
+        <p class="section-subtitle">
+            Sin complicaciones técnicas, sin instalar nada. Solo regístrate y ten tu sistema de citas funcionando en minutos.
+        </p>
+        <a href="auth.html" class="btn-primary">Crear cuenta gratis</a>
+    </section>
+
+    <!-- ========== FOOTER ========== -->
+    <footer>
+        <p>© 2025 Citanext. Todos los derechos reservados. | Hecho con ❤️ para emprendedores</p>
+    </footer>
+
+    <!-- Script para FAQ -->
+    <script>
+        document.querySelectorAll('.faq-question').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const answer = btn.nextElementSibling;
+                const icon = btn.querySelector('i');
+                answer.classList.toggle('show');
+                icon.classList.toggle('fa-chevron-down');
+                icon.classList.toggle('fa-chevron-up');
+            });
+        });
+    </script>
+</body>
+</html>

@@ -54,7 +54,7 @@ async function cargarPerfil() {
     cargarPerfil();
     return;
   }
-  const enlace = `http://127.0.0.1:5500/reserva.html?negocio=${uid}`;
+  const enlace = `https://emilioesgo.github.io/citanext/reserva.html?negocio=${uid}`;
 document.getElementById('enlace-publico').value = enlace;
 
 document.getElementById('copiar-enlace').addEventListener('click', () => {

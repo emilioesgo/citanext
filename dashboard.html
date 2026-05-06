@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - MiAgenda</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body>
+
+  <!-- Barra superior -->
+  <nav class="topbar">
+  <h1>📅 MiAgenda</h1>
+  <div class="topbar-actions">
+    <a href="calendar.html" class="btn-secondary">📆 Calendario</a>
+    <button id="btn-logout" class="btn-secondary">Cerrar sesión</button>
+  </div>
+</nav>
+<div class="input-group" style="margin-top:20px;">
+  <label>Tu enlace de reservas públicas</label>
+  <div style="display:flex; gap:10px;">
+    <input type="text" id="enlace-publico" readonly style="flex:1;">
+    <button type="button" id="copiar-enlace" class="btn-secondary">Copiar</button>
+  </div>
+</div>
+
+  <div class="dashboard-container">
+
+    <!-- Pestañas -->
+    <div class="tabs">
+      <button class="tab active" data-tab="perfil">Perfil</button>
+      <button class="tab" data-tab="servicios">Servicios</button>
+      <button class="tab" data-tab="empleados">Empleados</button>
+      <button class="tab" data-tab="citas">Citas</button>
+    </div>
+
+    <!-- ========== SECCIÓN PERFIL ========== -->
+    <section id="tab-perfil" class="tab-content active">
+      <h2>Datos de tu negocio</h2>
+      <form id="form-perfil">
+        <div class="input-group">
+          <label>Nombre del negocio</label>
+          <input type="text" id="perfil-nombre" required>
+        </div>
+        <div class="input-group">
+          <label>Teléfono</label>
+          <input type="tel" id="perfil-telefono" required>
+        </div>
+        <div class="input-group">
+          <label>Correo electrónico</label>
+          <input type="email" id="perfil-email" disabled>
+        </div>
+        <div class="input-group">
+          <label>WhatsApp para notificaciones</label>
+          <input type="tel" id="perfil-whatsapp" placeholder="521234567890">
+        </div>
+        <div class="input-group">
+          <label>Descripción breve</label>
+          <textarea id="perfil-descripcion" rows="3"></textarea>
+        </div>
+        <button type="submit" class="btn-primary">Guardar cambios</button>
+      </form>
+
+      <h3>Logo y portada</h3>
+      <div class="upload-area">
+        <div>
+          <label>Logo (recomendado 200x200)</label>
+          <input type="file" id="logo-file" accept="image/*">
+          <img id="logo-preview" class="preview-img" src="" alt="Logo">
+        </div>
+        <div>
+          <label>Portada (recomendado 800x300)</label>
+          <input type="file" id="portada-file" accept="image/*">
+          <img id="portada-preview" class="preview-img" src="" alt="Portada">
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SECCIÓN SERVICIOS ========== -->
+    <section id="tab-servicios" class="tab-content">
+      <h2>Tus servicios</h2>
+      <form id="form-servicio" class="inline-form">
+        <input type="text" id="servicio-nombre" placeholder="Nombre del servicio" required>
+        <input type="number" id="servicio-duracion" placeholder="Minutos" required>
+        <input type="number" id="servicio-precio" placeholder="Precio" required>
+        <input type="color" id="servicio-color" value="#667eea">
+        <button type="submit" class="btn-primary">Agregar</button>
+      </form>
+      <ul id="lista-servicios" class="item-list"></ul>
+    </section>
+
+    <!-- ========== SECCIÓN EMPLEADOS ========== -->
+    <section id="tab-empleados" class="tab-content">
+      <h2>Tus empleados</h2>
+      <form id="form-empleado" class="inline-form">
+        <input type="text" id="empleado-nombre" placeholder="Nombre" required>
+        <input type="text" id="empleado-especialidad" placeholder="Especialidad">
+        <button type="submit" class="btn-primary">Agregar</button>
+      </form>
+      <ul id="lista-empleados" class="item-list"></ul>
+    </section>
+
+    <!-- ========== SECCIÓN CITAS ========== -->
+    <section id="tab-citas" class="tab-content">
+      <h2>Próximas citas</h2>
+      <div id="lista-citas">Cargando...</div>
+    </section>
+
+  </div>
+
+  <script type="module" src="js/dashboard.js"></script>
+</body>
+</html>

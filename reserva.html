@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reserva tu cita - MiAgenda</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/reserva.css">
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+</head>
+<body>
+
+  <!-- CABECERA CON LOGO Y PORTADA -->
+  <div id="portada-container" class="portada">
+    <img id="portada-img" src="" alt="Portada" class="portada-img">
+    <div class="portada-overlay">
+      <img id="logo-img" src="" alt="Logo" class="logo-overlay">
+      <h1 id="nombre-negocio">Cargando...</h1>
+      <p class="slogan">Agenda tu cita fácilmente</p>
+    </div>
+  </div>
+
+  <!-- CONTENEDOR PRINCIPAL -->
+  <main class="reserva-container">
+    <!-- PASO 1: Elegir servicio y empleado -->
+    <section id="paso1" class="paso activo">
+      <h2>¿Qué servicio necesitas?</h2>
+      <div id="lista-servicios" class="tarjetas-servicios"></div>
+
+      <h2>¿Prefieres algún empleado?</h2>
+      <div id="lista-empleados" class="tarjetas-empleados">
+        <div class="empleado-card seleccionable" data-id="">Cualquiera</div>
+      </div>
+
+      <button id="btn-siguiente" class="btn-primary" disabled>Siguiente: Elegir fecha</button>
+    </section>
+
+    <!-- PASO 2: Elegir fecha y hora -->
+    <section id="paso2" class="paso">
+      <h2>Selecciona el día</h2>
+      <div id="mini-calendario"></div>
+
+      <h2>Horarios disponibles</h2>
+      <div id="slots-horarios" class="slots"></div>
+
+      <div class="botones-navegacion">
+        <button id="btn-volver-paso1" class="btn-secondary">Volver</button>
+        <button id="btn-siguiente-paso3" class="btn-primary" disabled>Siguiente: Tus datos</button>
+      </div>
+    </section>
+
+    <!-- PASO 3: Datos del cliente -->
+    <section id="paso3" class="paso">
+      <h2>Completa tus datos</h2>
+      <form id="form-cliente">
+        <div class="input-group">
+          <label>Nombre completo</label>
+          <input type="text" id="cliente-nombre" required>
+        </div>
+        <div class="input-group">
+          <label>Teléfono (con código de país)</label>
+          <input type="tel" id="cliente-telefono" placeholder="521234567890" required>
+        </div>
+        <div class="input-group">
+          <label>Correo electrónico (opcional)</label>
+          <input type="email" id="cliente-email">
+        </div>
+        <div class="botones-navegacion">
+          <button type="button" id="btn-volver-paso2" class="btn-secondary">Volver</button>
+          <button type="submit" class="btn-primary">Confirmar cita</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- CONFIRMACIÓN -->
+    <section id="confirmacion" class="paso">
+      <div class="confirmacion-card">
+        <span class="icono-confirmacion">✅</span>
+        <h2>¡Cita agendada!</h2>
+        <p id="resumen-cita"></p>
+        <button id="btn-whatsapp" class="btn-whatsapp">Enviar confirmación por WhatsApp</button>
+        <button id="btn-nueva-cita" class="btn-secondary">Agendar otra cita</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FullCalendar JS (para mini calendario) -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script type="module" src="js/reserva.js"></script>
+</body>
+</html>

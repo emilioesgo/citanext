@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calendario de Citas - MiAgenda</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/calendar.css">
+  <!-- FullCalendar CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css" rel="stylesheet">
+</head>
+<body>
+  <!-- Barra superior -->
+  <nav class="topbar">
+    <h1>📅 MiAgenda</h1>
+    <div class="topbar-actions">
+      <a href="dashboard.html" class="btn-secondary">⬅ Dashboard</a>
+      <button id="btn-logout" class="btn-secondary">Cerrar sesión</button>
+    </div>
+  </nav>
+
+  <div class="calendar-wrapper">
+    <div id="calendar"></div>
+  </div>
+
+  <!-- Modal para crear/editar cita -->
+  <div id="modal-cita" class="modal hidden">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2 id="modal-titulo">Nueva cita</h2>
+      <form id="form-cita">
+        <div class="input-group">
+          <label>Cliente</label>
+          <input type="text" id="cita-cliente" placeholder="Nombre del cliente" required>
+        </div>
+        <div class="input-group">
+          <label>Teléfono</label>
+          <input type="tel" id="cita-telefono" placeholder="521234567890" required>
+        </div>
+        <div class="input-group">
+          <label>Email (opcional)</label>
+          <input type="email" id="cita-email" placeholder="correo@cliente.com">
+        </div>
+        <div class="input-group">
+          <label>Servicio</label>
+          <select id="cita-servicio" required></select>
+        </div>
+        <div class="input-group">
+          <label>Empleado (opcional)</label>
+          <select id="cita-empleado"></select>
+        </div>
+        <div class="input-group">
+          <label>Fecha y hora</label>
+          <input type="datetime-local" id="cita-fecha" required>
+        </div>
+        <button type="submit" class="btn-primary">Guardar cita</button>
+        <button type="button" id="btn-eliminar-cita" class="btn-danger hidden">Eliminar cita</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- FullCalendar JS -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script type="module" src="js/calendar.js"></script>
+</body>
+</html>

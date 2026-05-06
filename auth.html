@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registro - MiAgenda</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <h1>📅 MiAgenda</h1>
+        <p>Gestión de citas para tu negocio</p>
+      </div>
+
+      <!-- Registro -->
+      <form id="register-form" class="auth-form">
+        <h2>Crear cuenta</h2>
+        <div class="input-group">
+          <label>Nombre del negocio</label>
+          <input type="text" id="reg-name" placeholder="Tu estética, agencia..." required>
+        </div>
+        <div class="input-group">
+          <label>Teléfono</label>
+          <input type="tel" id="reg-phone" placeholder="521234567890" required>
+        </div>
+        <div class="input-group">
+          <label>Correo electrónico</label>
+          <input type="email" id="reg-email" placeholder="correo@negocio.com" required>
+        </div>
+        <div class="input-group">
+          <label>Contraseña (mín. 6 caracteres)</label>
+          <input type="password" id="reg-password" placeholder="Mínimo 6 caracteres" minlength="6" required>
+        </div>
+        <button type="submit" class="btn-primary">Registrarse</button>
+        <p class="auth-switch">¿Ya tienes cuenta? <a href="#" id="show-login">Inicia sesión</a></p>
+      </form>
+
+      <!-- Iniciar sesión (oculto) -->
+      <form id="login-form" class="auth-form hidden">
+        <h2>Iniciar sesión</h2>
+        <div class="input-group">
+          <label>Correo electrónico</label>
+          <input type="email" id="login-email" placeholder="correo@negocio.com" required>
+        </div>
+        <div class="input-group">
+          <label>Contraseña</label>
+          <input type="password" id="login-password" placeholder="Tu contraseña" required>
+        </div>
+        <button type="submit" class="btn-primary">Entrar</button>
+        <p class="auth-switch">¿No tienes cuenta? <a href="#" id="show-register">Regístrate</a></p>
+      </form>
+
+      <div id="auth-message" class="auth-message hidden"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/auth.js"></script>
+</body>
+</html>

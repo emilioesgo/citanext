@@ -1,9 +1,10 @@
 import { auth, db, storage } from './firebase-config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, deleteDoc, query, where, getDocs as getDocsQuery } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 let uid;
+let qrCodeInstance = null;
 
 // ---- AUTENTICACIÓN ----
 onAuthStateChanged(auth, async (user) => {
@@ -16,6 +17,7 @@ onAuthStateChanged(auth, async (user) => {
   cargarServicios();
   cargarEmpleados();
   cargarCitas();
+  cargarEnlace();
 });
 
 document.getElementById('btn-logout').addEventListener('click', async () => {
@@ -38,7 +40,6 @@ async function cargarPerfil() {
   const snap = await getDoc(docRef);
 
   if (!snap.exists()) {
-    // Si no existe el documento, lo creamos con los datos básicos
     const user = auth.currentUser;
     await setDoc(docRef, {
       nombre: user.displayName || '',
@@ -48,19 +49,12 @@ async function cargarPerfil() {
       descripcion: '',
       logoURL: '',
       portadaURL: '',
+      slug: '',
       createdAt: new Date()
     });
-    // Ahora que existe, volvemos a cargar el perfil
     cargarPerfil();
     return;
   }
-  const enlace = `https://emilioesgo.github.io/citanext/reserva.html?negocio=${uid}`;
-document.getElementById('enlace-publico').value = enlace;
-
-document.getElementById('copiar-enlace').addEventListener('click', () => {
-  navigator.clipboard.writeText(enlace);
-  alert('Enlace copiado');
-});
 
   const data = snap.data();
   document.getElementById('perfil-nombre').value = data.nombre || '';
@@ -75,7 +69,6 @@ document.getElementById('copiar-enlace').addEventListener('click', () => {
 document.getElementById('form-perfil').addEventListener('submit', async (e) => {
   e.preventDefault();
   const docRef = doc(db, 'negocios', uid);
-  // Usamos setDoc con merge:true para crear/actualizar
   await setDoc(docRef, {
     nombre: document.getElementById('perfil-nombre').value,
     telefono: document.getElementById('perfil-telefono').value,
@@ -90,13 +83,11 @@ async function subirImagen(file, tipo) {
   const storageRef = ref(storage, `negocios/${uid}/${tipo}`);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
-  // Actualizamos en el documento usando setDoc merge (o podemos seguir con updateDoc ya que el doc ya existe)
   const docRef = doc(db, 'negocios', uid);
   const snap = await getDoc(docRef);
   if (snap.exists()) {
     await updateDoc(docRef, { [`${tipo}URL`]: url });
   } else {
-    // Si por alguna razón no existe, lo creamos con la URL
     await setDoc(docRef, { [`${tipo}URL`]: url }, { merge: true });
   }
   document.getElementById(`${tipo}-preview`).src = url;
@@ -181,3 +172,107 @@ async function cargarCitas() {
     div.innerHTML += `<p>📌 ${c.clienteNombre} - ${fecha.toLocaleString()}</p>`;
   });
 }
+
+// ==================== NUEVA SECCIÓN ENLACES ====================
+async function cargarEnlace() {
+  const docRef = doc(db, 'negocios', uid);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return;
+
+  const data = snap.data();
+  const slug = data.slug || '';
+  document.getElementById('slug-input').value = slug;
+  actualizarEnlaceMostrado(slug);
+}
+
+function actualizarEnlaceMostrado(slug) {
+  const base = window.location.origin + '/reserva.html?negocio=';
+  const identificador = slug || uid;
+  const enlace = base + identificador;
+  document.getElementById('enlace-publico').value = enlace;
+  generarQR(enlace);
+}
+
+function generarQR(texto) {
+  const container = document.getElementById('qrcode');
+  container.innerHTML = '';
+  if (qrCodeInstance) qrCodeInstance = null;
+  qrCodeInstance = new QRCode(container, {
+    text: texto,
+    width: 180,
+    height: 180,
+    colorDark: "#4f46e5",
+    colorLight: "#ffffff",
+    correctLevel: QRCode.CorrectLevel.H
+  });
+}
+
+// Guardar slug
+document.getElementById('btn-guardar-slug').addEventListener('click', async () => {
+  const slugInput = document.getElementById('slug-input');
+  let slug = slugInput.value.trim().toLowerCase();
+  
+  if (slug === '') {
+    // Si borra el slug, se usará el UID por defecto
+    await updateDoc(doc(db, 'negocios', uid), { slug: '' });
+    actualizarEnlaceMostrado('');
+    alert('Slug eliminado. Se usará tu identificador único.');
+    return;
+  }
+
+  // Validar formato
+  if (!/^[a-z0-9\-]{3,30}$/.test(slug)) {
+    alert('El slug solo puede contener letras minúsculas, números y guiones. Entre 3 y 30 caracteres.');
+    return;
+  }
+
+  // Verificar si el slug ya está en uso por otro negocio
+  const q = query(collection(db, 'negocios'), where('slug', '==', slug));
+  const snap = await getDocsQuery(q);
+  let duplicado = false;
+  snap.forEach(docSnap => {
+    if (docSnap.id !== uid) duplicado = true;
+  });
+
+  if (duplicado) {
+    alert('Este identificador ya está en uso. Elige otro.');
+    return;
+  }
+
+  await updateDoc(doc(db, 'negocios', uid), { slug });
+  actualizarEnlaceMostrado(slug);
+  alert('¡Slug guardado! Tu enlace personalizado está listo.');
+});
+
+// Copiar enlace
+document.getElementById('copiar-enlace').addEventListener('click', () => {
+  const enlace = document.getElementById('enlace-publico').value;
+  navigator.clipboard.writeText(enlace).then(() => alert('Enlace copiado al portapapeles'));
+});
+
+// Compartir (Web Share API)
+document.getElementById('btn-compartir').addEventListener('click', () => {
+  const enlace = document.getElementById('enlace-publico').value;
+  if (navigator.share) {
+    navigator.share({
+      title: 'Reserva tu cita conmigo',
+      text: 'Agenda tu cita fácilmente usando este enlace.',
+      url: enlace
+    }).catch(() => {});
+  } else {
+    alert('Tu navegador no soporta compartir. Copia el enlace manualmente.');
+  }
+});
+
+// Descargar QR
+document.getElementById('btn-descargar-qr').addEventListener('click', () => {
+  const canvas = document.querySelector('#qrcode canvas');
+  if (!canvas) {
+    alert('El código QR aún no se ha generado.');
+    return;
+  }
+  const link = document.createElement('a');
+  link.download = 'citanext-qr.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});

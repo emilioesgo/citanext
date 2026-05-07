@@ -6,24 +6,19 @@
   <title>Dashboard - MiAgenda</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/dashboard.css">
+  <!-- Librería QR -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
   <!-- Barra superior -->
   <nav class="topbar">
-  <h1>📅 MiAgenda</h1>
-  <div class="topbar-actions">
-    <a href="calendar.html" class="btn-secondary">📆 Calendario</a>
-    <button id="btn-logout" class="btn-secondary">Cerrar sesión</button>
-  </div>
-</nav>
-<div class="input-group" style="margin-top:20px;">
-  <label>Tu enlace de reservas públicas</label>
-  <div style="display:flex; gap:10px;">
-    <input type="text" id="enlace-publico" readonly style="flex:1;">
-    <button type="button" id="copiar-enlace" class="btn-secondary">Copiar</button>
-  </div>
-</div>
+    <h1>📅 MiAgenda</h1>
+    <div class="topbar-actions">
+      <a href="calendar.html" class="btn-secondary">📆 Calendario</a>
+      <button id="btn-logout" class="btn-secondary">Cerrar sesión</button>
+    </div>
+  </nav>
 
   <div class="dashboard-container">
 
@@ -33,6 +28,7 @@
       <button class="tab" data-tab="servicios">Servicios</button>
       <button class="tab" data-tab="empleados">Empleados</button>
       <button class="tab" data-tab="citas">Citas</button>
+      <button class="tab" data-tab="enlaces">Enlaces</button>
     </div>
 
     <!-- ========== SECCIÓN PERFIL ========== -->
@@ -105,6 +101,38 @@
     <section id="tab-citas" class="tab-content">
       <h2>Próximas citas</h2>
       <div id="lista-citas">Cargando...</div>
+    </section>
+
+    <!-- ========== SECCIÓN ENLACES (NUEVA) ========== -->
+    <section id="tab-enlaces" class="tab-content">
+      <h2>Tu enlace de reservas</h2>
+      <p>Personaliza la dirección web que compartirás con tus clientes.</p>
+
+      <div class="input-group">
+        <label>Identificador único (slug)</label>
+        <div style="display:flex; gap:10px;">
+          <input type="text" id="slug-input" placeholder="ej. estetica-bella" pattern="[a-zA-Z0-9\-]{3,30}" style="flex:1;">
+          <button type="button" id="btn-guardar-slug" class="btn-primary" style="width:auto;">Guardar</button>
+        </div>
+        <small>Solo letras, números y guiones. Mínimo 3 caracteres.</small>
+      </div>
+
+      <div id="enlace-generado" style="margin: 25px 0; background:#f8faff; padding:20px; border-radius:14px;">
+        <label>Tu enlace público</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input type="text" id="enlace-publico" readonly style="flex:1;">
+          <button type="button" id="copiar-enlace" class="btn-secondary">📋 Copiar</button>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:15px; flex-wrap:wrap; align-items:center; margin-bottom:25px;">
+        <button type="button" id="btn-compartir" class="btn-secondary">📤 Compartir</button>
+        <button type="button" id="btn-descargar-qr" class="btn-secondary">⬇ Descargar QR</button>
+      </div>
+
+      <div id="qrcode-container" style="text-align:center; margin-top:20px;">
+        <div id="qrcode" style="display:inline-block;"></div>
+      </div>
     </section>
 
   </div>

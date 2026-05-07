@@ -24,8 +24,8 @@
       <span>Citanext</span>
     </div>
     <div class="topbar-actions">
-      <a href="calendar.html" class="btn-glass">📆 Calendario</a>
-      <button id="btn-logout" class="btn-glass">Cerrar sesión</button>
+      <a href="calendar.html" class="btn-glass"><i class="fa-solid fa-calendar-days"></i> Calendario</a>
+      <button id="btn-logout" class="btn-glass"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
     </div>
   </nav>
 
@@ -40,50 +40,124 @@
       <button class="tab" data-tab="enlaces"><i class="fa-solid fa-link"></i> Enlaces</button>
     </div>
 
-    <!-- ========== PERFIL ========== -->
+    <!-- ========== SECCIÓN PERFIL ========== -->
     <section id="tab-perfil" class="tab-content active">
-      <!-- igual que antes -->
-      <!-- ... (código del perfil) ... -->
+      <h2><i class="fa-solid fa-building"></i> Datos de tu negocio</h2>
+      <form id="form-perfil">
+        <div class="input-group">
+          <label>Nombre del negocio</label>
+          <input type="text" id="perfil-nombre" required>
+        </div>
+        <div class="input-group">
+          <label>Teléfono</label>
+          <input type="tel" id="perfil-telefono" required>
+        </div>
+        <div class="input-group">
+          <label>Correo electrónico</label>
+          <input type="email" id="perfil-email" disabled>
+        </div>
+        <div class="input-group">
+          <label>WhatsApp para notificaciones</label>
+          <input type="tel" id="perfil-whatsapp" placeholder="521234567890">
+        </div>
+        <div class="input-group">
+          <label>Descripción breve</label>
+          <textarea id="perfil-descripcion" rows="3"></textarea>
+        </div>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Guardar cambios</button>
+      </form>
+
+      <h3>Logo y portada</h3>
+      <div class="upload-area">
+        <div>
+          <label>Logo (recomendado 200x200)</label>
+          <input type="file" id="logo-file" accept="image/*">
+          <img id="logo-preview" class="preview-img" src="" alt="Logo">
+        </div>
+        <div>
+          <label>Portada (recomendado 800x300)</label>
+          <input type="file" id="portada-file" accept="image/*">
+          <img id="portada-preview" class="preview-img" src="" alt="Portada">
+        </div>
+      </div>
     </section>
 
-    <!-- ========== SERVICIOS + HORARIOS ========== -->
+    <!-- ========== SECCIÓN SERVICIOS ========== -->
     <section id="tab-servicios" class="tab-content">
-      <h2>Tus servicios</h2>
+      <h2><i class="fa-solid fa-scissors"></i> Tus servicios</h2>
       <form id="form-servicio" class="inline-form">
         <input type="text" id="servicio-nombre" placeholder="Nombre del servicio" required>
         <input type="number" id="servicio-duracion" placeholder="Minutos" required>
         <input type="number" id="servicio-precio" placeholder="Precio" required>
         <input type="color" id="servicio-color" value="#667eea">
-        <button type="submit" class="btn-primary">Agregar</button>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Agregar</button>
       </form>
       <ul id="lista-servicios" class="item-list"></ul>
 
       <!-- NUEVO: Horario de trabajo -->
       <h2>📅 Horario de trabajo</h2>
-      <p>Define tu jornada laboral por día de la semana.</p>
+      <p>Define tu jornada laboral por día de la semana y los días no laborables.</p>
       <form id="form-horario">
         <div id="dias-horario" class="horario-grid">
-          <!-- Se generarán con JavaScript -->
+          <!-- Se generará dinámicamente con JavaScript -->
         </div>
-        <button type="submit" class="btn-primary">Guardar horarios</button>
+        <button type="submit" class="btn-primary" style="margin-top:20px;"><i class="fa-solid fa-save"></i> Guardar horarios</button>
       </form>
     </section>
 
-    <!-- ========== EMPLEADOS ========== -->
+    <!-- ========== SECCIÓN EMPLEADOS ========== -->
     <section id="tab-empleados" class="tab-content">
-      <!-- igual que antes -->
+      <h2><i class="fa-solid fa-user-tie"></i> Tus empleados</h2>
+      <form id="form-empleado" class="inline-form">
+        <input type="text" id="empleado-nombre" placeholder="Nombre" required>
+        <input type="text" id="empleado-especialidad" placeholder="Especialidad">
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Agregar</button>
+      </form>
+      <ul id="lista-empleados" class="item-list"></ul>
     </section>
 
-    <!-- ========== CITAS (NUEVO CALENDARIO) ========== -->
+    <!-- ========== SECCIÓN CITAS ========== -->
     <section id="tab-citas" class="tab-content">
-      <h2>📊 Calendario de disponibilidad</h2>
+      <h2><i class="fa-solid fa-table-cells"></i> Calendario de disponibilidad</h2>
       <div id="calendario-citas"></div>
-      <p class="leyenda"><span class="dot verde"></span> Disponible <span class="dot amarillo"></span> Medio <span class="dot rojo"></span> Lleno <span class="dot gris"></span> Sin laborar</p>
+      <p class="leyenda">
+        <span class="dot verde"></span> Disponible
+        <span class="dot amarillo"></span> Medio
+        <span class="dot rojo"></span> Lleno
+        <span class="dot gris"></span> Sin laborar
+      </p>
     </section>
 
-    <!-- ========== ENLACES ========== -->
+    <!-- ========== SECCIÓN ENLACES ========== -->
     <section id="tab-enlaces" class="tab-content">
-      <!-- igual -->
+      <h2><i class="fa-solid fa-link"></i> Tu enlace de reservas</h2>
+      <p>Personaliza la dirección web que compartirás con tus clientes.</p>
+
+      <div class="input-group">
+        <label>Identificador único (slug)</label>
+        <div style="display:flex; gap:10px;">
+          <input type="text" id="slug-input" placeholder="ej. estetica-bella" pattern="[a-zA-Z0-9\-]{3,30}" style="flex:1;">
+          <button type="button" id="btn-guardar-slug" class="btn-primary" style="width:auto;"><i class="fa-solid fa-check"></i> Guardar</button>
+        </div>
+        <small>Solo letras, números y guiones. Mínimo 3 caracteres.</small>
+      </div>
+
+      <div id="enlace-generado" style="margin: 25px 0; background:#f8faff; padding:20px; border-radius:14px;">
+        <label>Tu enlace público</label>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <input type="text" id="enlace-publico" readonly style="flex:1;">
+          <button type="button" id="copiar-enlace" class="btn-secondary"><i class="fa-solid fa-copy"></i> Copiar</button>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:15px; flex-wrap:wrap; align-items:center; margin-bottom:25px;">
+        <button type="button" id="btn-compartir" class="btn-secondary"><i class="fa-solid fa-share-nodes"></i> Compartir</button>
+        <button type="button" id="btn-descargar-qr" class="btn-secondary"><i class="fa-solid fa-download"></i> Descargar QR</button>
+      </div>
+
+      <div id="qrcode-container" style="text-align:center; margin-top:20px;">
+        <div id="qrcode" style="display:inline-block;"></div>
+      </div>
     </section>
 
   </div>

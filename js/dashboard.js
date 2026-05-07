@@ -1,6 +1,6 @@
 import { auth, db, storage } from './firebase-config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, deleteDoc, query, where, getDocs as getDocsQuery } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 let uid;
@@ -186,7 +186,7 @@ async function cargarEnlace() {
 }
 
 function actualizarEnlaceMostrado(slug) {
-  const base = window.location.origin + '/reserva.html?negocio=';
+  const base = window.location.origin + window.location.pathname.replace('dashboard.html', '') + 'reserva.html?negocio=';
   const identificador = slug || uid;
   const enlace = base + identificador;
   document.getElementById('enlace-publico').value = enlace;
@@ -213,10 +213,13 @@ document.getElementById('btn-guardar-slug').addEventListener('click', async () =
   let slug = slugInput.value.trim().toLowerCase();
   
   if (slug === '') {
-    // Si borra el slug, se usará el UID por defecto
-    await updateDoc(doc(db, 'negocios', uid), { slug: '' });
-    actualizarEnlaceMostrado('');
-    alert('Slug eliminado. Se usará tu identificador único.');
+    try {
+      await updateDoc(doc(db, 'negocios', uid), { slug: '' });
+      actualizarEnlaceMostrado('');
+      alert('Slug eliminado. Se usará tu identificador único.');
+    } catch (error) {
+      alert('Error al eliminar el slug: ' + error.message);
+    }
     return;
   }
 
@@ -227,21 +230,36 @@ document.getElementById('btn-guardar-slug').addEventListener('click', async () =
   }
 
   // Verificar si el slug ya está en uso por otro negocio
-  const q = query(collection(db, 'negocios'), where('slug', '==', slug));
-  const snap = await getDocsQuery(q);
-  let duplicado = false;
-  snap.forEach(docSnap => {
-    if (docSnap.id !== uid) duplicado = true;
-  });
+  try {
+    const q = query(collection(db, 'negocios'), where('slug', '==', slug));
+    const snap = await getDocs(q);  // ✅ Corrección: getDocs (no getDocsQuery)
+    let duplicado = false;
+    snap.forEach(docSnap => {
+      if (docSnap.id !== uid) duplicado = true;
+    });
 
-  if (duplicado) {
-    alert('Este identificador ya está en uso. Elige otro.');
+    if (duplicado) {
+      alert('Este identificador ya está en uso. Elige otro.');
+      return;
+    }
+  } catch (error) {
+    console.error('Error verificando disponibilidad del slug:', error);
+    // Si el error es por índice faltante, mostrar instrucciones
+    if (error.code === 'failed-precondition') {
+      alert('El sistema necesita crear un índice en la base de datos. Haz clic en el enlace que aparecerá en la consola del navegador (F12) y recarga la página.');
+    } else {
+      alert('Error al verificar el slug. Inténtalo de nuevo. Detalles: ' + error.message);
+    }
     return;
   }
 
-  await updateDoc(doc(db, 'negocios', uid), { slug });
-  actualizarEnlaceMostrado(slug);
-  alert('¡Slug guardado! Tu enlace personalizado está listo.');
+  try {
+    await updateDoc(doc(db, 'negocios', uid), { slug });
+    actualizarEnlaceMostrado(slug);
+    alert('¡Slug guardado! Tu enlace personalizado está listo.');
+  } catch (error) {
+    alert('Error al guardar el slug: ' + error.message);
+  }
 });
 
 // Copiar enlace

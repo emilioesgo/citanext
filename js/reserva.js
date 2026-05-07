@@ -2,275 +2,295 @@ import { db } from './firebase-config.js';
 import { doc, getDoc, getDocs, collection, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const urlParams = new URLSearchParams(window.location.search);
-const identificador = urlParams.get('negocio'); // Puede ser UID o slug
+const identificador = urlParams.get('negocio'); // UID o slug
 
 if (!identificador) {
-  alert('No se especificó un negocio. Contacta al administrador.');
-  window.location.href = 'index.html';
+    alert('No se especificó un negocio. Contacta al administrador.');
+    window.location.href = 'index.html';
 }
 
+// Variables globales
+let negocioId = null;
+let datosNegocio = {};
 let servicioSeleccionado = null;
 let empleadoSeleccionado = null;
 let fechaSeleccionada = null;
 let horarioSeleccionado = null;
-let datosNegocio = {};
-let negocioId = null; // UID real del negocio
+let miniCalendario = null;
 
-// Elementos DOM
 const pasos = document.querySelectorAll('.paso');
 let pasoActual = 0;
 
+// Utilidad para cambiar de paso
 function mostrarPaso(indice) {
-  pasos.forEach(p => p.classList.remove('activo'));
-  pasos[indice].classList.add('activo');
-  pasoActual = indice;
+    pasos.forEach(p => p.classList.remove('activo'));
+    pasos[indice].classList.add('activo');
+    pasoActual = indice;
 }
 
-// ========== BUSCAR NEGOCIO (UID o slug) ==========
+// ==================== BUSCAR NEGOCIO ====================
 async function cargarNegocio() {
-  // 1. Intentar como UID directo
-  let snap = await getDoc(doc(db, 'negocios', identificador));
-  if (snap.exists()) {
-    negocioId = identificador;
-    procesarDatosNegocio(snap.data());
-    return;
-  }
+    // 1. Intentar como UID directo
+    let snap = await getDoc(doc(db, 'negocios', identificador));
+    if (snap.exists()) {
+        negocioId = identificador;
+        procesarNegocio(snap.data());
+        return;
+    }
 
-  // 2. Si no existe, buscar por slug
-  const q = query(collection(db, 'negocios'), where('slug', '==', identificador));
-  const querySnap = await getDocs(q);
-  
-  if (!querySnap.empty) {
-    negocioId = querySnap.docs[0].id; // el UID real del negocio
-    procesarDatosNegocio(querySnap.docs[0].data());
-  } else {
-    alert('El negocio no existe o el enlace es incorrecto.');
-    window.location.href = 'index.html';
-  }
+    // 2. Buscar por slug
+    const q = query(collection(db, 'negocios'), where('slug', '==', identificador));
+    const querySnap = await getDocs(q);
+    if (!querySnap.empty) {
+        negocioId = querySnap.docs[0].id;
+        procesarNegocio(querySnap.docs[0].data());
+    } else {
+        alert('Negocio no encontrado. Verifica el enlace.');
+        window.location.href = 'index.html';
+    }
 }
 
-function procesarDatosNegocio(data) {
-  datosNegocio = data;
-  document.getElementById('nombre-negocio').textContent = data.nombre || 'Mi Negocio';
-  document.getElementById('logo-img').src = data.logoURL || '';
-  document.getElementById('portada-img').src = data.portadaURL || '';
-  cargarServicios();
-  cargarEmpleados();
+function procesarNegocio(data) {
+    datosNegocio = data;
+    document.getElementById('nombre-negocio').textContent = data.nombre || 'Negocio';
+    document.getElementById('logo-img').src = data.logoURL || '';
+    document.getElementById('portada-img').src = data.portadaURL || '';
+    cargarServicios();
+    cargarEmpleados();
 }
 
-// ========== CARGAR SERVICIOS ==========
+// ==================== SERVICIOS ====================
 async function cargarServicios() {
-  const container = document.getElementById('lista-servicios');
-  container.innerHTML = '';
-  const snap = await getDocs(collection(db, 'negocios', negocioId, 'servicios'));
-  snap.forEach(doc => {
-    const s = doc.data();
-    const card = document.createElement('div');
-    card.className = 'servicio-card';
-    card.dataset.id = doc.id;
-    card.dataset.duracion = s.duracion;
-    card.innerHTML = `<div class="nombre">${s.nombre}</div>
-                      <div class="detalles">${s.duracion} min · $${s.precio}</div>`;
-    card.addEventListener('click', () => {
-      document.querySelectorAll('.servicio-card').forEach(c => c.classList.remove('seleccionado'));
-      card.classList.add('seleccionado');
-      servicioSeleccionado = { id: doc.id, ...s };
-      document.getElementById('btn-siguiente').disabled = false;
+    const container = document.getElementById('lista-servicios');
+    container.innerHTML = '';
+    const snap = await getDocs(collection(db, 'negocios', negocioId, 'servicios'));
+    snap.forEach(doc => {
+        const s = doc.data();
+        const card = document.createElement('div');
+        card.className = 'servicio-card';
+        card.dataset.id = doc.id;
+        card.dataset.duracion = s.duracion;
+        card.innerHTML = `<div class="nombre">${s.nombre}</div>
+                          <div class="detalles">${s.duracion} min · $${s.precio}</div>`;
+        card.addEventListener('click', () => {
+            document.querySelectorAll('.servicio-card').forEach(c => c.classList.remove('seleccionado'));
+            card.classList.add('seleccionado');
+            servicioSeleccionado = { id: doc.id, ...s };
+            document.getElementById('btn-siguiente').disabled = false;
+        });
+        container.appendChild(card);
     });
-    container.appendChild(card);
-  });
 }
 
-// ========== CARGAR EMPLEADOS ==========
+// ==================== EMPLEADOS ====================
 async function cargarEmpleados() {
-  const container = document.getElementById('lista-empleados');
-  // Mantener la opción "Cualquiera" (se recrea al limpiar)
-  container.innerHTML = '';
-  const cualquiera = document.createElement('div');
-  cualquiera.className = 'empleado-card seleccionable seleccionado';
-  cualquiera.dataset.id = '';
-  cualquiera.textContent = 'Cualquiera';
-  cualquiera.addEventListener('click', () => {
-    document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
-    cualquiera.classList.add('sele');
-    empleadoSeleccionado = null;
-  });
-  container.appendChild(cualquiera);
+    const container = document.getElementById('lista-empleados');
+    // Limpiar manteniendo solo el "Cualquiera"
+    container.querySelectorAll('.empleado-card:not([data-id=""])').forEach(c => c.remove());
 
-  const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
-  snap.forEach(doc => {
-    const e = doc.data();
-    const card = document.createElement('div');
-    card.className = 'empleado-card seleccionable';
-    card.dataset.id = doc.id;
-    card.textContent = e.nombre;
-    card.addEventListener('click', () => {
-      document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
-      card.classList.add('seleccionado');
-      empleadoSeleccionado = { id: doc.id, ...e };
+    const cualquiera = container.querySelector('.empleado-card[data-id=""]');
+    cualquiera.classList.add('seleccionado');
+    cualquiera.onclick = () => {
+        document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
+        cualquiera.classList.add('seleccionado');
+        empleadoSeleccionado = null;
+    };
+
+    const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
+    snap.forEach(doc => {
+        const e = doc.data();
+        const card = document.createElement('div');
+        card.className = 'empleado-card seleccionable';
+        card.dataset.id = doc.id;
+        card.textContent = e.nombre;
+        card.addEventListener('click', () => {
+            document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
+            card.classList.add('seleccionado');
+            empleadoSeleccionado = { id: doc.id, ...e };
+        });
+        container.appendChild(card);
     });
-    container.appendChild(card);
-  });
 }
 
-// ========== CALENDARIO (PASO 2) ==========
-let miniCalendario;
-function initMiniCalendario() {
-  const calendarEl = document.getElementById('mini-calendario');
-  if (miniCalendario) miniCalendario.destroy();
-  miniCalendario = new FullCalendar.Calendar(calendarEl, {
-    initialView: 'dayGridMonth',
-    locale: 'es',
-    buttonText: { today: 'Hoy' },
-    headerToolbar: { left: 'prev', center: 'title', right: 'next' },
-    selectable: true,
-    dateClick: async (info) => {
-      // Desmarcar fecha anterior visualmente (opcional)
-      document.querySelectorAll('.fc-day-selected').forEach(el => el.classList.remove('fc-day-selected'));
-      info.dayEl.classList.add('fc-day-selected');
-      fechaSeleccionada = info.dateStr;
-      await cargarHorariosDisponibles(fechaSeleccionada);
-      document.getElementById('btn-siguiente-paso3').disabled = true;
-    }
-  });
-  miniCalendario.render();
+// ==================== MINI CALENDARIO ====================
+function inicializarCalendario() {
+    if (miniCalendario) return;
+    const calendarEl = document.getElementById('mini-calendario');
+    miniCalendario = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        headerToolbar: { left: 'prev', center: 'title', right: 'next' },
+        selectable: false,
+        dayCellDidMount: (info) => {
+            // Marcar días no laborables según la configuración del negocio
+            const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][info.date.getDay()];
+            const horario = datosNegocio.horario || {};
+            const config = horario[diaSem] || { abierto: true };
+            if (!config.abierto) {
+                info.el.classList.add('dia-no-laborable');
+                info.el.style.pointerEvents = 'none';
+            }
+        },
+        dateClick: async (info) => {
+            // Verificar si el día es laborable
+            const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][info.date.getDay()];
+            const config = (datosNegocio.horario || {})[diaSem] || { abierto: true };
+            if (!config.abierto) {
+                alert('Lo sentimos, no laboramos este día.');
+                return;
+            }
+            // Solo permitir fechas desde hoy
+            const hoy = new Date();
+            hoy.setHours(0,0,0,0);
+            if (info.date < hoy) {
+                alert('No puedes seleccionar una fecha pasada.');
+                return;
+            }
+            fechaSeleccionada = info.dateStr;
+            await cargarHorariosDisponibles(fechaSeleccionada);
+            document.getElementById('btn-siguiente-paso3').disabled = true;
+        }
+    });
+    miniCalendario.render();
 }
 
-// ========== CARGAR HORARIOS DISPONIBLES ==========
+// ==================== HORARIOS DISPONIBLES ====================
 async function cargarHorariosDisponibles(fechaStr) {
-  const slotsContainer = document.getElementById('slots-horarios');
-  slotsContainer.innerHTML = 'Cargando horarios...';
-  horarioSeleccionado = null;
-  document.getElementById('btn-siguiente-paso3').disabled = true;
+    const slotsContainer = document.getElementById('slots-horarios');
+    slotsContainer.innerHTML = 'Cargando horarios...';
+    horarioSeleccionado = null;
+    document.getElementById('btn-siguiente-paso3').disabled = true;
 
-  if (!servicioSeleccionado) return;
-  const duracion = servicioSeleccionado.duracion; // en minutos
-  const inicioJornada = 9 * 60; // 9:00 en minutos
-  const finJornada = 18 * 60; // 18:00
+    if (!servicioSeleccionado) return;
+    const duracion = servicioSeleccionado.duracion; // minutos
 
-  // Obtener citas del día
-  const inicioDia = new Date(fechaStr + 'T00:00:00');
-  const finDia = new Date(fechaStr + 'T23:59:59');
-  const citasSnap = await getDocs(collection(db, 'negocios', negocioId, 'citas'));
-  const ocupados = [];
-  citasSnap.forEach(citaDoc => {
-    const c = citaDoc.data();
-    const fechaCita = c.fechaHora.toDate();
-    if (fechaCita >= inicioDia && fechaCita <= finDia) {
-      // Intentar obtener duración del servicio de la cita; si no, usar duración del servicio actual
-      const duracionCita = c.duracion || duracion;
-      ocupados.push({
-        inicio: fechaCita.getHours() * 60 + fechaCita.getMinutes(),
-        duracion: duracionCita
-      });
+    // Obtener jornada del día seleccionado
+    const fecha = new Date(fechaStr + 'T00:00:00');
+    const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
+    const horarioNegocio = (datosNegocio.horario || {})[diaSem] || { abierto: true, inicio: '09:00', fin: '18:00' };
+    if (!horarioNegocio.abierto) {
+        slotsContainer.innerHTML = 'No laboramos este día.';
+        return;
     }
-  });
 
-  // Generar slots cada 30 min
-  slotsContainer.innerHTML = '';
-  let slotsGenerados = 0;
-  for (let min = inicioJornada; min < finJornada; min += 30) {
-    const slotFin = min + duracion;
-    if (slotFin > finJornada) break;
-    const choca = ocupados.some(cita => {
-      return (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
+    const [hIni, mIni] = horarioNegocio.inicio.split(':').map(Number);
+    const [hFin, mFin] = horarioNegocio.fin.split(':').map(Number);
+    const inicioMinutos = hIni * 60 + mIni;
+    const finMinutos = hFin * 60 + mFin;
+
+    // Obtener citas del día
+    const inicioDia = new Date(fechaStr + 'T00:00:00');
+    const finDia = new Date(fechaStr + 'T23:59:59');
+    const citasSnap = await getDocs(collection(db, 'negocios', negocioId, 'citas'));
+    const ocupados = [];
+    citasSnap.forEach(citaDoc => {
+        const c = citaDoc.data();
+        const fechaCita = c.fechaHora.toDate();
+        if (fechaCita >= inicioDia && fechaCita <= finDia && c.estado !== 'cancelada') {
+            ocupados.push({
+                inicio: fechaCita.getHours() * 60 + fechaCita.getMinutes(),
+                duracion: c.duracion || duracion
+            });
+        }
     });
-    if (!choca) {
-      const horas = Math.floor(min / 60);
-      const minutos = min % 60;
-      const horaStr = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
-      const slot = document.createElement('div');
-      slot.className = 'slot';
-      slot.textContent = horaStr;
-      slot.addEventListener('click', () => {
-        document.querySelectorAll('.slot').forEach(s => s.classList.remove('seleccionado'));
-        slot.classList.add('seleccionado');
-        horarioSeleccionado = horaStr;
-        document.getElementById('btn-siguiente-paso3').disabled = false;
-      });
-      slotsContainer.appendChild(slot);
-      slotsGenerados++;
+
+    // Generar slots cada 30 min
+    slotsContainer.innerHTML = '';
+    let slotsGenerados = 0;
+    for (let min = inicioMinutos; min < finMinutos; min += 30) {
+        const slotFin = min + duracion;
+        if (slotFin > finMinutos) break;
+        const choca = ocupados.some(cita => {
+            return (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
+        });
+        if (!choca) {
+            const horas = Math.floor(min / 60);
+            const minutos = min % 60;
+            const horaStr = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
+            const slot = document.createElement('div');
+            slot.className = 'slot';
+            slot.textContent = horaStr;
+            slot.addEventListener('click', () => {
+                document.querySelectorAll('.slot').forEach(s => s.classList.remove('seleccionado'));
+                slot.classList.add('seleccionado');
+                horarioSeleccionado = horaStr;
+                document.getElementById('btn-siguiente-paso3').disabled = false;
+            });
+            slotsContainer.appendChild(slot);
+            slotsGenerados++;
+        }
     }
-  }
-  if (slotsGenerados === 0) {
-    slotsContainer.innerHTML = 'No hay horarios disponibles para esta fecha.';
-  }
+    if (slotsGenerados === 0) {
+        slotsContainer.innerHTML = 'No hay horarios disponibles para esta fecha.';
+    }
 }
 
-// ========== NAVEGACIÓN ENTRE PASOS ==========
+// ==================== NAVEGACIÓN ====================
 document.getElementById('btn-siguiente').addEventListener('click', () => {
-  if (!servicioSeleccionado) {
-    alert('Selecciona un servicio primero.');
-    return;
-  }
-  mostrarPaso(1);
-  if (!miniCalendario) initMiniCalendario();
-  else miniCalendario.render();
+    if (!servicioSeleccionado) return;
+    mostrarPaso(1);
+    if (!miniCalendario) inicializarCalendario();
+    else miniCalendario.render();
 });
 
 document.getElementById('btn-volver-paso1').addEventListener('click', () => mostrarPaso(0));
 document.getElementById('btn-siguiente-paso3').addEventListener('click', () => mostrarPaso(2));
 document.getElementById('btn-volver-paso2').addEventListener('click', () => mostrarPaso(1));
 
-// ========== CONFIRMAR CITA ==========
+// ==================== CONFIRMAR CITA ====================
 document.getElementById('form-cliente').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const nombre = document.getElementById('cliente-nombre').value.trim();
-  const telefono = document.getElementById('cliente-telefono').value.trim();
-  const email = document.getElementById('cliente-email').value.trim();
+    e.preventDefault();
+    const nombre = document.getElementById('cliente-nombre').value.trim();
+    const telefono = document.getElementById('cliente-telefono').value.trim();
+    const email = document.getElementById('cliente-email').value.trim();
 
-  if (!nombre || !telefono) {
-    alert('Nombre y teléfono son obligatorios.');
-    return;
-  }
+    const fechaHora = new Date(`${fechaSeleccionada}T${horarioSeleccionado}:00`);
 
-  const fechaHora = new Date(`${fechaSeleccionada}T${horarioSeleccionado}:00`);
-  
-  const citaData = {
-    clienteNombre: nombre,
-    clienteTelefono: telefono,
-    clienteEmail: email,
-    servicioId: servicioSeleccionado.id,
-    servicioNombre: servicioSeleccionado.nombre,
-    empleadoId: empleadoSeleccionado?.id || null,
-    fechaHora,
-    color: servicioSeleccionado.color || '#667eea',
-    estado: 'confirmada',
-    createdAt: new Date()
-  };
-
-  try {
-    await addDoc(collection(db, 'negocios', negocioId, 'citas'), citaData);
-    const resumen = `${servicioSeleccionado.nombre} el ${fechaSeleccionada} a las ${horarioSeleccionado}`;
-    document.getElementById('resumen-cita').textContent = resumen;
-    mostrarPaso(3);
-
-    const waNumero = datosNegocio.whatsapp || datosNegocio.telefono;
-    const mensaje = `Hola, confirmo mi cita: ${resumen}. Gracias.`;
-    document.getElementById('btn-whatsapp').onclick = () => {
-      window.open(`https://wa.me/${waNumero}?text=${encodeURIComponent(mensaje)}`, '_blank');
+    const citaData = {
+        clienteNombre: nombre,
+        clienteTelefono: telefono,
+        clienteEmail: email,
+        servicioId: servicioSeleccionado.id,
+        servicioNombre: servicioSeleccionado.nombre,
+        empleadoId: empleadoSeleccionado?.id || null,
+        fechaHora,
+        color: servicioSeleccionado.color || '#667eea',
+        estado: 'confirmada',
+        createdAt: new Date()
     };
-  } catch (error) {
-    alert('Error al agendar la cita: ' + error.message);
-  }
+
+    try {
+        await addDoc(collection(db, 'negocios', negocioId, 'citas'), citaData);
+        const resumen = `${servicioSeleccionado.nombre} el ${fechaSeleccionada} a las ${horarioSeleccionado}`;
+        document.getElementById('resumen-cita').textContent = resumen;
+        mostrarPaso(3);
+
+        const waNumero = datosNegocio.whatsapp || datosNegocio.telefono;
+        const mensaje = `Hola, confirmo mi cita: ${resumen}. Gracias.`;
+        document.getElementById('btn-whatsapp').onclick = () => {
+            window.open(`https://wa.me/${waNumero}?text=${encodeURIComponent(mensaje)}`, '_blank');
+        };
+    } catch (error) {
+        alert('Error al agendar la cita: ' + error.message);
+    }
 });
 
-// ========== NUEVA CITA (REINICIAR) ==========
+// Nueva cita: reiniciar estado
 document.getElementById('btn-nueva-cita').addEventListener('click', () => {
-  servicioSeleccionado = null;
-  empleadoSeleccionado = null;
-  fechaSeleccionada = null;
-  horarioSeleccionado = null;
-  document.querySelectorAll('.seleccionado, .fc-day-selected').forEach(el => el.classList.remove('seleccionado', 'fc-day-selected'));
-  document.getElementById('btn-siguiente').disabled = true;
-  document.getElementById('form-cliente').reset();
-  if (miniCalendario) {
-    miniCalendario.destroy();
-    miniCalendario = null;
-  }
-  mostrarPaso(0);
+    servicioSeleccionado = null;
+    empleadoSeleccionado = null;
+    fechaSeleccionada = null;
+    horarioSeleccionado = null;
+    document.querySelectorAll('.seleccionado, .fc-day-today').forEach(el => el.classList.remove('seleccionado', 'fc-day-today'));
+    document.getElementById('btn-siguiente').disabled = true;
+    document.getElementById('form-cliente').reset();
+    if (miniCalendario) {
+        miniCalendario.destroy();
+        miniCalendario = null;
+    }
+    mostrarPaso(0);
 });
 
-// ========== INICIO ==========
+// Inicio
 cargarNegocio();
 mostrarPaso(0);

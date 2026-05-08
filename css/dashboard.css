@@ -293,3 +293,29 @@ input:focus, textarea:focus {
   gap: 30px;
   flex-wrap: wrap;
 }
+/* ====== BOTONES DE DISPONIBILIDAD DE EMPLEADOS (FIX 3) ====== */
+.btn-disponibilidad {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+.btn-disponibilidad.disponible {
+  background: rgba(34,197,94,0.15);
+  color: #16a34a;
+  border: 1px solid rgba(34,197,94,0.3);
+}
+.btn-disponibilidad.disponible:hover {
+  background: rgba(34,197,94,0.25);
+}
+.btn-disponibilidad.no-disponible {
+  background: rgba(239,68,68,0.12);
+  color: #dc2626;
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.btn-disponibilidad.no-disponible:hover {
+  background: rgba(239,68,68,0.22);
+}

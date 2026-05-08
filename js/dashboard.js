@@ -6,6 +6,9 @@ import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/fireba
 let uid;
 let qrCodeInstance = null;
 let calendarioCitas = null;
+// FIX 2: variable global para el nombre del negocio, usado al compartir
+let nombreNegocio = 'Mi Negocio';
+
 const DIAS_SEMANA = ['lun','mar','mie','jue','vie','sab','dom'];
 const NOMBRES_DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
@@ -35,8 +38,12 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.getElementById(tabId).classList.add('active');
 
     if (btn.dataset.tab === 'citas') {
+      // FIX 1: updateSize() después de que el DOM termine de pintar el tab visible
       if (calendarioCitas) {
-        actualizarDisponibilidadCalendario();
+        requestAnimationFrame(() => {
+          calendarioCitas.updateSize();
+          actualizarDisponibilidadCalendario();
+        });
       } else {
         setTimeout(inicializarCalendarioCitas, 100);
       }
@@ -68,6 +75,9 @@ async function cargarPerfil() {
     }
 
     const data = snap.data();
+    // FIX 2: guardar el nombre del negocio en la variable global
+    nombreNegocio = data.nombre || 'Mi Negocio';
+
     document.getElementById('perfil-nombre').value = data.nombre || '';
     document.getElementById('perfil-telefono').value = data.telefono || '';
     document.getElementById('perfil-email').value = data.email || '';
@@ -85,14 +95,17 @@ document.getElementById('form-perfil').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
+    const nuevoNombre = document.getElementById('perfil-nombre').value;
     const docRef = doc(db, 'negocios', uid);
     await setDoc(docRef, {
-      nombre: document.getElementById('perfil-nombre').value,
+      nombre: nuevoNombre,
       telefono: document.getElementById('perfil-telefono').value,
       whatsapp: document.getElementById('perfil-whatsapp').value,
       descripcion: document.getElementById('perfil-descripcion').value,
       email: auth.currentUser.email
     }, { merge: true });
+    // FIX 2: actualizar variable global al guardar
+    nombreNegocio = nuevoNombre || 'Mi Negocio';
     alert('Perfil actualizado');
   } catch (error) {
     console.error('Error al guardar perfil:', error);
@@ -103,7 +116,6 @@ document.getElementById('form-perfil').addEventListener('submit', async (e) => {
 // ========== SUBIDA DE IMAGEN CON REDIMENSIÓN ==========
 async function subirImagen(file, tipo) {
   try {
-    // Redimensionar antes de subir
     const maxWidth = tipo === 'logo' ? 400 : 1200;
     const maxHeight = tipo === 'logo' ? 400 : 400;
     const redimensionado = await redimensionarImagen(file, maxWidth, maxHeight);
@@ -277,6 +289,7 @@ document.getElementById('form-horario')?.addEventListener('submit', async (e) =>
 });
 
 // ========== EMPLEADOS ==========
+// FIX 3: cargarEmpleados ahora muestra badge de disponibilidad y botón toggle
 async function cargarEmpleados() {
   try {
     const snap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
@@ -285,14 +298,45 @@ async function cargarEmpleados() {
     lista.innerHTML = '';
     snap.forEach(docSnap => {
       const emp = docSnap.data();
+      // disponible es true por defecto si el campo no existe
+      const disponible = emp.disponible !== false;
       const li = document.createElement('li');
-      li.innerHTML = `${emp.nombre} - ${emp.especialidad || 'Sin especialidad'}
-        <button class="btn-danger" data-id="${docSnap.id}">Eliminar</button>`;
+      li.dataset.id = docSnap.id;
+      li.innerHTML = `
+        <div style="display:flex; align-items:center; gap:10px; flex:1;">
+          <span style="font-weight:500;">${emp.nombre}</span>
+          <span style="color:#64748b; font-size:0.85rem;">${emp.especialidad || 'Sin especialidad'}</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button
+            class="btn-disponibilidad ${disponible ? 'disponible' : 'no-disponible'}"
+            data-id="${docSnap.id}"
+            data-disponible="${disponible}"
+            title="${disponible ? 'Disponible – clic para marcar como no disponible' : 'No disponible – clic para marcar como disponible'}"
+          >
+            ${disponible ? '🟢 Disponible' : '🔴 No disponible'}
+          </button>
+          <button class="btn-danger" data-id="${docSnap.id}">Eliminar</button>
+        </div>
+      `;
       li.querySelector('.btn-danger').onclick = () => eliminarEmpleado(docSnap.id);
+      li.querySelector('.btn-disponibilidad').onclick = () => toggleDisponibilidadEmpleado(docSnap.id, disponible);
       lista.appendChild(li);
     });
   } catch (error) {
     console.error('Error al cargar empleados:', error);
+  }
+}
+
+// FIX 3: función para alternar disponibilidad
+async function toggleDisponibilidadEmpleado(id, actualDisponible) {
+  try {
+    const nuevoEstado = !actualDisponible;
+    await updateDoc(doc(db, 'negocios', uid, 'empleados', id), { disponible: nuevoEstado });
+    cargarEmpleados();
+  } catch (error) {
+    console.error('Error al cambiar disponibilidad:', error);
+    alert('No se pudo actualizar la disponibilidad.');
   }
 }
 
@@ -306,13 +350,18 @@ async function eliminarEmpleado(id) {
   }
 }
 
+// FIX 3: al agregar empleado se guarda disponible:true por defecto
 document.getElementById('form-empleado').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
     const nombre = document.getElementById('empleado-nombre').value;
     const especialidad = document.getElementById('empleado-especialidad').value;
-    await addDoc(collection(db, 'negocios', uid, 'empleados'), { nombre, especialidad });
+    await addDoc(collection(db, 'negocios', uid, 'empleados'), {
+      nombre,
+      especialidad,
+      disponible: true   // FIX 3: campo de disponibilidad
+    });
     e.target.reset();
     cargarEmpleados();
   } catch (error) {
@@ -336,7 +385,11 @@ function inicializarCalendarioCitas() {
     dayCellDidMount: (info) => info.el.classList.add('pendiente')
   });
   calendarioCitas.render();
-  actualizarDisponibilidadCalendario();
+  // FIX 1: forzar recálculo de tamaño antes de pintar disponibilidad
+  requestAnimationFrame(() => {
+    calendarioCitas.updateSize();
+    actualizarDisponibilidadCalendario();
+  });
 }
 
 async function actualizarDisponibilidadCalendario() {
@@ -566,11 +619,25 @@ document.getElementById('copiar-enlace')?.addEventListener('click', () => {
   navigator.clipboard.writeText(enlace).then(() => alert('Enlace copiado'));
 });
 
+// FIX 2: compartir con nombre del negocio y texto atractivo para WhatsApp y redes sociales
 document.getElementById('btn-compartir')?.addEventListener('click', () => {
   const enlace = document.getElementById('enlace-publico').value;
+  const titulo = `📅 Reserva tu cita en ${nombreNegocio}`;
+  const texto = `¡Hola! Te comparto el enlace para agendar tu cita en *${nombreNegocio}* 🎉\n\nEs muy fácil y rápido — elige tu servicio, fecha y hora en segundos:\n👉 ${enlace}\n\n¡Te esperamos! 😊`;
   if (navigator.share) {
-    navigator.share({ title: 'Reserva tu cita', text: 'Agenda conmigo', url: enlace }).catch(() => {});
-  } else alert('Compartir no soportado en este navegador. Copia el enlace.');
+    navigator.share({
+      title: titulo,
+      text: texto,
+      url: enlace
+    }).catch(() => {});
+  } else {
+    // Fallback: copiar texto completo al portapapeles
+    navigator.clipboard.writeText(texto).then(() => {
+      alert('Texto copiado al portapapeles. ¡Pégalo en WhatsApp o tus redes! 📋');
+    }).catch(() => {
+      alert('Compartir no soportado en este navegador. Copia el enlace manualmente.');
+    });
+  }
 });
 
 document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
@@ -582,12 +649,18 @@ document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
   link.click();
 });
 
-// Observer para pestaña de citas
+// FIX 1: Observer para pestaña de citas — ahora también llama updateSize()
 const tabObserver = new MutationObserver(() => {
   const citasTab = document.getElementById('tab-citas');
   if (citasTab?.classList.contains('active')) {
-    if (calendarioCitas) actualizarDisponibilidadCalendario();
-    else setTimeout(inicializarCalendarioCitas, 100);
+    if (calendarioCitas) {
+      requestAnimationFrame(() => {
+        calendarioCitas.updateSize();
+        actualizarDisponibilidadCalendario();
+      });
+    } else {
+      setTimeout(inicializarCalendarioCitas, 100);
+    }
   }
 });
 const tabCitasEl = document.getElementById('tab-citas');

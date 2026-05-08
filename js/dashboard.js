@@ -34,7 +34,6 @@ document.querySelectorAll('.tab').forEach(btn => {
     const tabId = `tab-${btn.dataset.tab}`;
     document.getElementById(tabId).classList.add('active');
 
-    // Si se activa la pestaña de citas, inicializar calendario
     if (btn.dataset.tab === 'citas') {
       setTimeout(inicializarCalendarioCitas, 100);
     }
@@ -173,7 +172,7 @@ async function cargarHorarios() {
   });
 }
 
-document.getElementById('form-horario').addEventListener('submit', async (e) => {
+document.getElementById('form-horario')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const horario = {};
   DIAS_SEMANA.forEach(dia => {
@@ -228,7 +227,6 @@ function inicializarCalendarioCitas() {
     headerToolbar: { left: 'prev', center: 'title', right: 'next' },
     dateClick: (info) => abrirCitasDelDia(info.date),
     dayCellDidMount: (info) => {
-      // Se pinta después en actualizarDisponibilidadCalendario
       info.el.classList.add('pendiente');
     }
   });
@@ -243,7 +241,6 @@ async function actualizarDisponibilidadCalendario() {
   const horario = data.horario || {};
   const citasSnapshot = await getDocs(collection(db, 'negocios', uid, 'citas'));
 
-  // Mapa de citas por día
   const citasPorDia = {};
   citasSnapshot.docs.forEach(d => {
     const c = d.data();
@@ -254,7 +251,7 @@ async function actualizarDisponibilidadCalendario() {
     citasPorDia[key].push(c);
   });
 
-  const diasSemanaJS = ['dom','lun','mar','mie','jue','vie','sab']; // getDay() 0=dom
+  const diasSemanaJS = ['dom','lun','mar','mie','jue','vie','sab'];
   const calendarApi = calendarioCitas;
   const currentDate = calendarApi.getDate();
   const year = currentDate.getFullYear();
@@ -262,7 +259,6 @@ async function actualizarDisponibilidadCalendario() {
   const primerDia = new Date(year, month, 1);
   const ultimoDia = new Date(year, month+1, 0);
 
-  // Quitar clases existentes
   document.querySelectorAll('.fc-daygrid-day').forEach(el => {
     el.classList.remove('dia-verde','dia-amarillo','dia-rojo','dia-no-laborable');
   });
@@ -288,7 +284,7 @@ async function actualizarDisponibilidadCalendario() {
     if (citasHoy === 0) celda.classList.add('dia-verde');
     else if (citasHoy < maxCitas/2) celda.classList.add('dia-amarillo');
     else if (citasHoy < maxCitas) celda.classList.add('dia-rojo');
-    else celda.classList.add('dia-rojo'); // lleno
+    else celda.classList.add('dia-rojo');
   }
 }
 
@@ -352,7 +348,6 @@ function abrirCitasDelDia(fecha) {
   });
 }
 
-// Cerrar modal
 document.querySelector('#modal-citas-dia .close').onclick = () => {
   document.getElementById('modal-citas-dia').classList.add('hidden');
 };
@@ -454,7 +449,7 @@ document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
   link.click();
 });
 
-// ========== ACTUALIZAR DISPONIBILIDAD AL VOLVER A LA PESTAÑA CITAS ==========
+// ========== OBSERVER PARA PESTAÑA CITAS ==========
 const observer = new MutationObserver(() => {
   const citasTab = document.getElementById('tab-citas');
   if (citasTab?.classList.contains('active')) {

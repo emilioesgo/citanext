@@ -16,7 +16,7 @@ onAuthStateChanged(auth, async (user) => {
   cargarPerfil();
   cargarServicios();
   cargarEmpleados();
-  inicializarCalendarioCitas(); // ✅ Corrección: ahora sí llamamos al calendario
+  inicializarCalendarioCitas();
   cargarEnlace();
   cargarHorarios();
 });
@@ -34,69 +34,92 @@ document.querySelectorAll('.tab').forEach(btn => {
     const tabId = `tab-${btn.dataset.tab}`;
     document.getElementById(tabId).classList.add('active');
 
+    // FIX #6: al volver a la pestaña de citas se refresca la disponibilidad en lugar
+    // de intentar re-inicializar (el guard if(calendarioCitas) return lo bloquearía)
     if (btn.dataset.tab === 'citas') {
-      setTimeout(inicializarCalendarioCitas, 100);
+      if (calendarioCitas) {
+        actualizarDisponibilidadCalendario();
+      } else {
+        setTimeout(inicializarCalendarioCitas, 100);
+      }
     }
   });
 });
 
 // ========== PERFIL ==========
 async function cargarPerfil() {
-  const docRef = doc(db, 'negocios', uid);
-  const snap = await getDoc(docRef);
+  try {
+    const docRef = doc(db, 'negocios', uid);
+    const snap = await getDoc(docRef);
 
-  if (!snap.exists()) {
-    const user = auth.currentUser;
-    await setDoc(docRef, {
-      nombre: user.displayName || '',
-      telefono: '',
-      email: user.email,
-      whatsapp: '',
-      descripcion: '',
-      logoURL: '',
-      portadaURL: '',
-      slug: '',
-      createdAt: new Date()
-    });
-    cargarPerfil();
-    return;
+    if (!snap.exists()) {
+      const user = auth.currentUser;
+      await setDoc(docRef, {
+        nombre: user.displayName || '',
+        telefono: '',
+        email: user.email,
+        whatsapp: '',
+        descripcion: '',
+        logoURL: '',
+        portadaURL: '',
+        slug: '',
+        createdAt: new Date()
+      });
+      await cargarPerfil(); // FIX: await para evitar race condition en la llamada recursiva
+      return;
+    }
+
+    const data = snap.data();
+    document.getElementById('perfil-nombre').value = data.nombre || '';
+    document.getElementById('perfil-telefono').value = data.telefono || '';
+    document.getElementById('perfil-email').value = data.email || '';
+    document.getElementById('perfil-whatsapp').value = data.whatsapp || '';
+    document.getElementById('perfil-descripcion').value = data.descripcion || '';
+    if (data.logoURL) document.getElementById('logo-preview').src = data.logoURL;
+    if (data.portadaURL) document.getElementById('portada-preview').src = data.portadaURL;
+  } catch (error) {
+    console.error('Error al cargar perfil:', error);
+    alert('No se pudo cargar el perfil. Revisa tu conexión.');
   }
-
-  const data = snap.data();
-  document.getElementById('perfil-nombre').value = data.nombre || '';
-  document.getElementById('perfil-telefono').value = data.telefono || '';
-  document.getElementById('perfil-email').value = data.email || '';
-  document.getElementById('perfil-whatsapp').value = data.whatsapp || '';
-  document.getElementById('perfil-descripcion').value = data.descripcion || '';
-  if (data.logoURL) document.getElementById('logo-preview').src = data.logoURL;
-  if (data.portadaURL) document.getElementById('portada-preview').src = data.portadaURL;
 }
 
 document.getElementById('form-perfil').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const docRef = doc(db, 'negocios', uid);
-  await setDoc(docRef, {
-    nombre: document.getElementById('perfil-nombre').value,
-    telefono: document.getElementById('perfil-telefono').value,
-    whatsapp: document.getElementById('perfil-whatsapp').value,
-    descripcion: document.getElementById('perfil-descripcion').value,
-    email: auth.currentUser.email
-  }, { merge: true });
-  alert('Perfil actualizado');
+  // FIX #4: guard por si auth aún no resolvió
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.');
+  try {
+    const docRef = doc(db, 'negocios', uid);
+    await setDoc(docRef, {
+      nombre: document.getElementById('perfil-nombre').value,
+      telefono: document.getElementById('perfil-telefono').value,
+      whatsapp: document.getElementById('perfil-whatsapp').value,
+      descripcion: document.getElementById('perfil-descripcion').value,
+      email: auth.currentUser.email
+    }, { merge: true });
+    alert('Perfil actualizado');
+  } catch (error) {
+    console.error('Error al guardar perfil:', error);
+    alert('No se pudo guardar el perfil. Intenta de nuevo.');
+  }
 });
 
 async function subirImagen(file, tipo) {
-  const storageRef = ref(storage, `negocios/${uid}/${tipo}`);
-  await uploadBytes(storageRef, file);
-  const url = await getDownloadURL(storageRef);
-  const docRef = doc(db, 'negocios', uid);
-  const snap = await getDoc(docRef);
-  if (snap.exists()) {
-    await updateDoc(docRef, { [`${tipo}URL`]: url });
-  } else {
-    await setDoc(docRef, { [`${tipo}URL`]: url }, { merge: true });
+  try {
+    const storageRef = ref(storage, `negocios/${uid}/${tipo}`);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    const docRef = doc(db, 'negocios', uid);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      await updateDoc(docRef, { [`${tipo}URL`]: url });
+    } else {
+      await setDoc(docRef, { [`${tipo}URL`]: url }, { merge: true });
+    }
+    document.getElementById(`${tipo}-preview`).src = url;
+  } catch (error) {
+    console.error(`Error al subir imagen (${tipo}):`, error);
+    alert('No se pudo subir la imagen. Intenta de nuevo.');
   }
-  document.getElementById(`${tipo}-preview`).src = url;
 }
 
 document.getElementById('logo-file').addEventListener('change', (e) => {
@@ -108,112 +131,152 @@ document.getElementById('portada-file').addEventListener('change', (e) => {
 
 // ========== SERVICIOS ==========
 async function cargarServicios() {
-  const snap = await getDocs(collection(db, 'negocios', uid, 'servicios'));
-  const lista = document.getElementById('lista-servicios');
-  lista.innerHTML = '';
-  snap.forEach(doc => {
-    const s = doc.data();
-    const li = document.createElement('li');
-    li.innerHTML = `<span style="color:${s.color}">● ${s.nombre} | ${s.duracion} min | $${s.precio}</span>
-      <button class="btn-danger" data-id="${doc.id}">Eliminar</button>`;
-    li.querySelector('.btn-danger').onclick = () => eliminarServicio(doc.id);
-    lista.appendChild(li);
-  });
+  try {
+    const snap = await getDocs(collection(db, 'negocios', uid, 'servicios'));
+    const lista = document.getElementById('lista-servicios');
+    lista.innerHTML = '';
+    snap.forEach(docSnap => {
+      const s = docSnap.data();
+      const li = document.createElement('li');
+      li.innerHTML = `<span style="color:${s.color}">● ${s.nombre} | ${s.duracion} min | $${s.precio}</span>
+        <button class="btn-danger" data-id="${docSnap.id}">Eliminar</button>`;
+      li.querySelector('.btn-danger').onclick = () => eliminarServicio(docSnap.id);
+      lista.appendChild(li);
+    });
+  } catch (error) {
+    console.error('Error al cargar servicios:', error);
+  }
 }
 
 async function eliminarServicio(id) {
-  await deleteDoc(doc(db, 'negocios', uid, 'servicios', id));
-  cargarServicios();
+  try {
+    await deleteDoc(doc(db, 'negocios', uid, 'servicios', id));
+    cargarServicios();
+  } catch (error) {
+    console.error('Error al eliminar servicio:', error);
+    alert('No se pudo eliminar el servicio.');
+  }
 }
 
 document.getElementById('form-servicio').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const nombre = document.getElementById('servicio-nombre').value;
-  const duracion = parseInt(document.getElementById('servicio-duracion').value);
-  const precio = parseFloat(document.getElementById('servicio-precio').value);
-  const color = document.getElementById('servicio-color').value;
-  await addDoc(collection(db, 'negocios', uid, 'servicios'), { nombre, duracion, precio, color });
-  e.target.reset();
-  cargarServicios();
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  try {
+    const nombre = document.getElementById('servicio-nombre').value;
+    const duracion = parseInt(document.getElementById('servicio-duracion').value);
+    const precio = parseFloat(document.getElementById('servicio-precio').value);
+    const color = document.getElementById('servicio-color').value;
+    await addDoc(collection(db, 'negocios', uid, 'servicios'), { nombre, duracion, precio, color });
+    e.target.reset();
+    cargarServicios();
+  } catch (error) {
+    console.error('Error al guardar servicio:', error);
+    alert('No se pudo guardar el servicio.');
+  }
 });
 
 // ========== HORARIOS ==========
 async function cargarHorarios() {
-  const docRef = doc(db, 'negocios', uid);
-  const snap = await getDoc(docRef);
-  const data = snap.data() || {};
-  const horario = data.horario || {};
-  const container = document.getElementById('dias-horario');
-  if (!container) return;
-  container.innerHTML = '';
-  DIAS_SEMANA.forEach((dia, idx) => {
-    const d = horario[dia] || { abierto: idx<5, inicio: '09:00', fin: '18:00' };
-    const div = document.createElement('div');
-    div.className = 'dia-horario';
-    div.innerHTML = `
-      <label><input type="checkbox" class="chk-abierto" data-dia="${dia}" ${d.abierto?'checked':''}> ${NOMBRES_DIAS[idx]}</label>
-      <div style="margin-top:8px;">
-        <input type="time" class="inicio" data-dia="${dia}" value="${d.inicio}" ${d.abierto?'':'disabled'}>
-        <span> a </span>
-        <input type="time" class="fin" data-dia="${dia}" value="${d.fin}" ${d.abierto?'':'disabled'}>
-      </div>
-    `;
-    container.appendChild(div);
-  });
-
-  document.querySelectorAll('.chk-abierto').forEach(chk => {
-    chk.addEventListener('change', (e) => {
-      const dia = e.target.dataset.dia;
-      const inicio = document.querySelector(`.inicio[data-dia="${dia}"]`);
-      const fin = document.querySelector(`.fin[data-dia="${dia}"]`);
-      inicio.disabled = !e.target.checked;
-      fin.disabled = !e.target.checked;
+  try {
+    const docRef = doc(db, 'negocios', uid);
+    const snap = await getDoc(docRef);
+    const data = snap.data() || {};
+    const horario = data.horario || {};
+    const container = document.getElementById('dias-horario');
+    if (!container) return;
+    container.innerHTML = '';
+    DIAS_SEMANA.forEach((dia, idx) => {
+      const d = horario[dia] || { abierto: idx < 5, inicio: '09:00', fin: '18:00' };
+      const div = document.createElement('div');
+      div.className = 'dia-horario';
+      div.innerHTML = `
+        <label><input type="checkbox" class="chk-abierto" data-dia="${dia}" ${d.abierto ? 'checked' : ''}> ${NOMBRES_DIAS[idx]}</label>
+        <div style="margin-top:8px;">
+          <input type="time" class="inicio" data-dia="${dia}" value="${d.inicio}" ${d.abierto ? '' : 'disabled'}>
+          <span> a </span>
+          <input type="time" class="fin" data-dia="${dia}" value="${d.fin}" ${d.abierto ? '' : 'disabled'}>
+        </div>
+      `;
+      container.appendChild(div);
     });
-  });
+
+    document.querySelectorAll('.chk-abierto').forEach(chk => {
+      chk.addEventListener('change', (e) => {
+        const dia = e.target.dataset.dia;
+        const inicio = document.querySelector(`.inicio[data-dia="${dia}"]`);
+        const fin = document.querySelector(`.fin[data-dia="${dia}"]`);
+        inicio.disabled = !e.target.checked;
+        fin.disabled = !e.target.checked;
+      });
+    });
+  } catch (error) {
+    console.error('Error al cargar horarios:', error);
+  }
 }
 
 document.getElementById('form-horario')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const horario = {};
-  DIAS_SEMANA.forEach(dia => {
-    const abierto = document.querySelector(`.chk-abierto[data-dia="${dia}"]`).checked;
-    const inicio = document.querySelector(`.inicio[data-dia="${dia}"]`).value;
-    const fin = document.querySelector(`.fin[data-dia="${dia}"]`).value;
-    horario[dia] = { abierto, inicio, fin };
-  });
-  await updateDoc(doc(db, 'negocios', uid), { horario });
-  alert('Horarios guardados');
-  if (calendarioCitas) actualizarDisponibilidadCalendario();
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  try {
+    const horario = {};
+    DIAS_SEMANA.forEach(dia => {
+      const abierto = document.querySelector(`.chk-abierto[data-dia="${dia}"]`).checked;
+      const inicio = document.querySelector(`.inicio[data-dia="${dia}"]`).value;
+      const fin = document.querySelector(`.fin[data-dia="${dia}"]`).value;
+      horario[dia] = { abierto, inicio, fin };
+    });
+    await updateDoc(doc(db, 'negocios', uid), { horario });
+    alert('Horarios guardados');
+    if (calendarioCitas) actualizarDisponibilidadCalendario();
+  } catch (error) {
+    console.error('Error al guardar horarios:', error);
+    alert('No se pudo guardar los horarios.');
+  }
 });
 
 // ========== EMPLEADOS ==========
 async function cargarEmpleados() {
-  const snap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
-  const lista = document.getElementById('lista-empleados');
-  if (!lista) return;
-  lista.innerHTML = '';
-  snap.forEach(doc => {
-    const emp = doc.data();
-    const li = document.createElement('li');
-    li.innerHTML = `${emp.nombre} - ${emp.especialidad || 'Sin especialidad'}
-      <button class="btn-danger" data-id="${doc.id}">Eliminar</button>`;
-    li.querySelector('.btn-danger').onclick = () => eliminarEmpleado(doc.id);
-    lista.appendChild(li);
-  });
+  try {
+    const snap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
+    const lista = document.getElementById('lista-empleados');
+    if (!lista) return;
+    lista.innerHTML = '';
+    snap.forEach(docSnap => {
+      const emp = docSnap.data();
+      const li = document.createElement('li');
+      li.innerHTML = `${emp.nombre} - ${emp.especialidad || 'Sin especialidad'}
+        <button class="btn-danger" data-id="${docSnap.id}">Eliminar</button>`;
+      li.querySelector('.btn-danger').onclick = () => eliminarEmpleado(docSnap.id);
+      lista.appendChild(li);
+    });
+  } catch (error) {
+    console.error('Error al cargar empleados:', error);
+  }
 }
 
 async function eliminarEmpleado(id) {
-  await deleteDoc(doc(db, 'negocios', uid, 'empleados', id));
-  cargarEmpleados();
+  try {
+    await deleteDoc(doc(db, 'negocios', uid, 'empleados', id));
+    cargarEmpleados();
+  } catch (error) {
+    console.error('Error al eliminar empleado:', error);
+    alert('No se pudo eliminar el empleado.');
+  }
 }
 
 document.getElementById('form-empleado').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const nombre = document.getElementById('empleado-nombre').value;
-  const especialidad = document.getElementById('empleado-especialidad').value;
-  await addDoc(collection(db, 'negocios', uid, 'empleados'), { nombre, especialidad });
-  e.target.reset();
-  cargarEmpleados();
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  try {
+    const nombre = document.getElementById('empleado-nombre').value;
+    const especialidad = document.getElementById('empleado-especialidad').value;
+    await addDoc(collection(db, 'negocios', uid, 'empleados'), { nombre, especialidad });
+    e.target.reset();
+    cargarEmpleados();
+  } catch (error) {
+    console.error('Error al guardar empleado:', error);
+    alert('No se pudo guardar el empleado.');
+  }
 });
 
 // ========== CITAS (CALENDARIO DE DISPONIBILIDAD) ==========
@@ -236,66 +299,70 @@ function inicializarCalendarioCitas() {
 
 async function actualizarDisponibilidadCalendario() {
   if (!calendarioCitas) return;
-  const snapNegocio = await getDoc(doc(db, 'negocios', uid));
-  const data = snapNegocio.data() || {};
-  const horario = data.horario || {};
-  const citasSnapshot = await getDocs(collection(db, 'negocios', uid, 'citas'));
+  try {
+    const snapNegocio = await getDoc(doc(db, 'negocios', uid));
+    const data = snapNegocio.data() || {};
+    const horario = data.horario || {};
+    const citasSnapshot = await getDocs(collection(db, 'negocios', uid, 'citas'));
 
-  const citasPorDia = {};
-  citasSnapshot.docs.forEach(d => {
-    const c = d.data();
-    if (c.estado === 'cancelada') return;
-    const fecha = c.fechaHora.toDate();
-    const key = fecha.toISOString().split('T')[0];
-    if (!citasPorDia[key]) citasPorDia[key] = [];
-    citasPorDia[key].push(c);
-  });
+    const citasPorDia = {};
+    citasSnapshot.docs.forEach(d => {
+      const c = d.data();
+      if (c.estado === 'cancelada') return;
+      const fecha = c.fechaHora.toDate();
+      const key = fecha.toISOString().split('T')[0];
+      if (!citasPorDia[key]) citasPorDia[key] = [];
+      citasPorDia[key].push(c);
+    });
 
-  const diasSemanaJS = ['dom','lun','mar','mie','jue','vie','sab'];
-  const calendarApi = calendarioCitas;
-  const currentDate = calendarApi.getDate();
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const primerDia = new Date(year, month, 1);
-  const ultimoDia = new Date(year, month+1, 0);
+    const diasSemanaJS = ['dom','lun','mar','mie','jue','vie','sab'];
+    const calendarApi = calendarioCitas;
+    const currentDate = calendarApi.getDate();
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const primerDia = new Date(year, month, 1);
+    const ultimoDia = new Date(year, month + 1, 0);
 
-  document.querySelectorAll('.fc-daygrid-day').forEach(el => {
-    el.classList.remove('dia-verde','dia-amarillo','dia-rojo','dia-no-laborable');
-  });
+    document.querySelectorAll('.fc-daygrid-day').forEach(el => {
+      el.classList.remove('dia-verde', 'dia-amarillo', 'dia-naranja', 'dia-rojo', 'dia-no-laborable');
+    });
 
-  for (let d = new Date(primerDia); d <= ultimoDia; d.setDate(d.getDate()+1)) {
-    const fechaStr = d.toISOString().split('T')[0];
-    const diaSem = diasSemanaJS[d.getDay()];
-    const config = horario[diaSem] || { abierto: (d.getDay() !== 0), inicio: '09:00', fin: '18:00' };
-    const celda = document.querySelector(`.fc-daygrid-day[data-date="${fechaStr}"]`);
-    if (!celda) continue;
+    for (let d = new Date(primerDia); d <= ultimoDia; d.setDate(d.getDate() + 1)) {
+      const fechaStr = d.toISOString().split('T')[0];
+      const diaSem = diasSemanaJS[d.getDay()];
+      const config = horario[diaSem] || { abierto: (d.getDay() !== 0), inicio: '09:00', fin: '18:00' };
+      const celda = document.querySelector(`.fc-daygrid-day[data-date="${fechaStr}"]`);
+      if (!celda) continue;
 
-    if (!config.abierto) {
-      celda.classList.add('dia-no-laborable');
-      continue;
+      if (!config.abierto) {
+        celda.classList.add('dia-no-laborable');
+        continue;
+      }
+
+      const [hIni, mIni] = config.inicio.split(':').map(Number);
+      const [hFin, mFin] = config.fin.split(':').map(Number);
+      const minutosTotales = (hFin * 60 + mFin) - (hIni * 60 + mIni);
+      const maxCitas = Math.floor(minutosTotales / 30);
+      const citasHoy = (citasPorDia[fechaStr] || []).length;
+
+      // FIX #3: tres estados diferenciados en lugar de dos ramas iguales en rojo
+      if (citasHoy === 0)                        celda.classList.add('dia-verde');
+      else if (citasHoy < maxCitas / 2)           celda.classList.add('dia-amarillo');
+      else if (citasHoy < maxCitas)               celda.classList.add('dia-naranja'); // casi lleno
+      else                                        celda.classList.add('dia-rojo');    // completamente lleno
     }
-
-    const [hIni, mIni] = config.inicio.split(':').map(Number);
-    const [hFin, mFin] = config.fin.split(':').map(Number);
-    const minutosTotales = (hFin*60+mFin) - (hIni*60+mIni);
-    const maxCitas = Math.floor(minutosTotales / 30);
-    const citasHoy = (citasPorDia[fechaStr] || []).length;
-
-    if (citasHoy === 0) celda.classList.add('dia-verde');
-    else if (citasHoy < maxCitas/2) celda.classList.add('dia-amarillo');
-    else if (citasHoy < maxCitas) celda.classList.add('dia-rojo');
-    else celda.classList.add('dia-rojo');
+  } catch (error) {
+    console.error('Error al actualizar disponibilidad del calendario:', error);
   }
 }
 
 function abrirCitasDelDia(fecha) {
-  const fechaStr = fecha.toISOString().split('T')[0];
   const modal = document.getElementById('modal-citas-dia');
   const titulo = document.getElementById('fecha-seleccionada');
   const container = document.getElementById('lista-citas-dia');
   if (!modal || !container) return;
 
-  titulo.textContent = `Citas del ${fecha.toLocaleDateString('es-MX', {dateStyle:'long'})}`;
+  titulo.textContent = `Citas del ${fecha.toLocaleDateString('es-MX', { dateStyle: 'long' })}`;
   container.innerHTML = 'Cargando...';
   modal.classList.remove('hidden');
 
@@ -320,76 +387,102 @@ function abrirCitasDelDia(fecha) {
   };
   document.addEventListener('keydown', escapeHandler);
 
-  const observer = new MutationObserver(() => {
+  const mutationObserver = new MutationObserver(() => {
     if (modal.classList.contains('hidden')) {
       document.removeEventListener('keydown', escapeHandler);
-      observer.disconnect();
+      mutationObserver.disconnect();
     }
   });
-  observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+  mutationObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
 
   // ---- CARGAR CITAS DEL DÍA ----
-  getDocs(query(collection(db, 'negocios', uid, 'citas'), 
-    where('fechaHora', '>=', new Date(fechaStr+'T00:00:00')),
-    where('fechaHora', '<=', new Date(fechaStr+'T23:59:59'))
+  // FIX #2: construcción de rangos con setHours para respetar zona horaria local
+  const inicioDia = new Date(fecha);
+  inicioDia.setHours(0, 0, 0, 0);
+  const finDia = new Date(fecha);
+  finDia.setHours(23, 59, 59, 999);
+
+  getDocs(query(
+    collection(db, 'negocios', uid, 'citas'),
+    where('fechaHora', '>=', inicioDia),
+    where('fechaHora', '<=', finDia)
   )).then(snap => {
     container.innerHTML = '';
     if (snap.empty) {
       container.innerHTML = '<p style="text-align:center; padding:20px;">No hay citas para este día.</p>';
       return;
     }
-    snap.forEach(doc => {
-      const cita = doc.data();
-      const hora = cita.fechaHora.toDate().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+    snap.forEach(docSnap => {
+      const cita = docSnap.data();
+      const hora = cita.fechaHora.toDate().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
       const div = document.createElement('div');
       div.className = 'item-cita';
       div.innerHTML = `
         <span>${hora} - ${cita.clienteNombre} (${cita.servicioNombre})</span>
         <div>
-          <button class="btn-xs btn-cancelar" data-id="${doc.id}">❌ Cancelar</button>
-          <button class="btn-xs btn-reprogramar" data-id="${doc.id}">🔄 Reprogramar</button>
+          <button class="btn-xs btn-cancelar" data-id="${docSnap.id}">❌ Cancelar</button>
+          <button class="btn-xs btn-reprogramar" data-id="${docSnap.id}">🔄 Reprogramar</button>
         </div>
       `;
       container.appendChild(div);
     });
 
-    document.querySelectorAll('.btn-cancelar').forEach(b => {
+    // FIX #1: container.querySelectorAll en lugar de document.querySelectorAll
+    // para no afectar botones con el mismo nombre fuera del modal
+    container.querySelectorAll('.btn-cancelar').forEach(b => {
       b.onclick = async (e) => {
         if (confirm('¿Cancelar esta cita?')) {
-          await deleteDoc(doc(db, 'negocios', uid, 'citas', e.target.dataset.id));
-          abrirCitasDelDia(fecha);
-          actualizarDisponibilidadCalendario();
+          try {
+            await deleteDoc(doc(db, 'negocios', uid, 'citas', e.target.dataset.id));
+            abrirCitasDelDia(fecha);
+            actualizarDisponibilidadCalendario();
+          } catch (error) {
+            console.error('Error al cancelar cita:', error);
+            alert('No se pudo cancelar la cita.');
+          }
         }
       };
     });
 
-    document.querySelectorAll('.btn-reprogramar').forEach(b => {
-      b.onclick = (e) => {
+    // FIX #1: container.querySelectorAll en lugar de document.querySelectorAll
+    container.querySelectorAll('.btn-reprogramar').forEach(b => {
+      b.onclick = async (e) => {
         const nuevaFecha = prompt('Introduce nueva fecha y hora (YYYY-MM-DD HH:MM)');
         if (nuevaFecha) {
-          updateDoc(doc(db, 'negocios', uid, 'citas', e.target.dataset.id), {
-            fechaHora: new Date(nuevaFecha)
-          }).then(() => {
+          try {
+            await updateDoc(doc(db, 'negocios', uid, 'citas', e.target.dataset.id), {
+              fechaHora: new Date(nuevaFecha)
+            });
             abrirCitasDelDia(fecha);
             actualizarDisponibilidadCalendario();
-          });
+          } catch (error) {
+            console.error('Error al reprogramar cita:', error);
+            alert('No se pudo reprogramar la cita.');
+          }
         }
       };
     });
+  }).catch(error => {
+    console.error('Error al cargar citas del día:', error);
+    container.innerHTML = '<p style="text-align:center; padding:20px; color:red;">Error al cargar las citas.</p>';
   });
 }
 
 // ========== ENLACES ==========
 async function cargarEnlace() {
-  const docRef = doc(db, 'negocios', uid);
-  const snap = await getDoc(docRef);
-  if (!snap.exists()) return;
+  try {
+    const docRef = doc(db, 'negocios', uid);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return;
 
-  const data = snap.data();
-  const slug = data.slug || '';
-  const slugInput = document.getElementById('slug-input');
-  if (slugInput) slugInput.value = slug;
-  actualizarEnlaceMostrado(slug);
+    const data = snap.data();
+    const slug = data.slug || '';
+    const slugInput = document.getElementById('slug-input');
+    if (slugInput) slugInput.value = slug;
+    actualizarEnlaceMostrado(slug);
+  } catch (error) {
+    console.error('Error al cargar enlace:', error);
+  }
 }
 
 function actualizarEnlaceMostrado(slug) {
@@ -416,13 +509,19 @@ function generarQR(texto) {
 }
 
 document.getElementById('btn-guardar-slug').addEventListener('click', async () => {
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
   const slugInput = document.getElementById('slug-input');
   let slug = slugInput.value.trim().toLowerCase();
-  
+
   if (slug === '') {
-    await updateDoc(doc(db, 'negocios', uid), { slug: '' });
-    actualizarEnlaceMostrado('');
-    alert('Slug eliminado. Se usará tu identificador único.');
+    try {
+      await updateDoc(doc(db, 'negocios', uid), { slug: '' });
+      actualizarEnlaceMostrado('');
+      alert('Slug eliminado. Se usará tu identificador único.');
+    } catch (error) {
+      console.error('Error al eliminar slug:', error);
+      alert('No se pudo eliminar el slug.');
+    }
     return;
   }
 
@@ -442,15 +541,13 @@ document.getElementById('btn-guardar-slug').addEventListener('click', async () =
       alert('Este identificador ya está en uso. Elige otro.');
       return;
     }
+    await updateDoc(doc(db, 'negocios', uid), { slug });
+    actualizarEnlaceMostrado(slug);
+    alert('¡Slug guardado! Tu enlace personalizado está listo.');
   } catch (error) {
-    console.error('Error verificando slug:', error);
-    alert('Error al verificar el slug. Revisa la consola.');
-    return;
+    console.error('Error al guardar slug:', error);
+    alert('Error al verificar o guardar el slug. Revisa la consola.');
   }
-
-  await updateDoc(doc(db, 'negocios', uid), { slug });
-  actualizarEnlaceMostrado(slug);
-  alert('¡Slug guardado! Tu enlace personalizado está listo.');
 });
 
 document.getElementById('copiar-enlace')?.addEventListener('click', () => {
@@ -477,11 +574,18 @@ document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
 });
 
 // ========== OBSERVER PARA PESTAÑA CITAS ==========
-const observer = new MutationObserver(() => {
+// FIX #6: al detectar que la pestaña se activa, se refresca la disponibilidad
+// si el calendario ya existe, en lugar de llamar a inicializarCalendarioCitas
+// que quedaría bloqueada por el guard interno
+const tabObserver = new MutationObserver(() => {
   const citasTab = document.getElementById('tab-citas');
   if (citasTab?.classList.contains('active')) {
-    setTimeout(inicializarCalendarioCitas, 100);
+    if (calendarioCitas) {
+      actualizarDisponibilidadCalendario();
+    } else {
+      setTimeout(inicializarCalendarioCitas, 100);
+    }
   }
 });
 const tabCitasEl = document.getElementById('tab-citas');
-if (tabCitasEl) observer.observe(tabCitasEl, { attributes: true, attributeFilter: ['class'] });
+if (tabCitasEl) tabObserver.observe(tabCitasEl, { attributes: true, attributeFilter: ['class'] });

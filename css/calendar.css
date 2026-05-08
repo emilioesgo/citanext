@@ -144,3 +144,152 @@
 .hidden {
   display: none !important;
 }
+/* ====================================================
+   RESPONSIVE MÓVIL – PWA
+   ==================================================== */
+@media (max-width: 768px) {
+
+  /* ── Barra superior ── */
+  .topbar {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .topbar h1 {
+    font-size: 1.2rem;
+  }
+  .topbar-actions {
+    gap: 6px;
+  }
+  .topbar-actions .btn-secondary {
+    padding: 7px 12px;
+    font-size: 0.78rem;
+  }
+
+  /* ── Wrapper ── */
+  .calendar-wrapper {
+    margin: 10px auto;
+    padding: 0 8px;
+  }
+
+  /* ── Contenedor principal de FullCalendar ── */
+  .fc {
+    padding: 10px 6px;
+    border-radius: 14px;
+  }
+
+  /* ── Toolbar: apilamos en dos líneas ── */
+  .fc-toolbar {
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    justify-content: center !important;
+    margin-bottom: 10px !important;
+  }
+  .fc-toolbar-chunk {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+  .fc-toolbar-title {
+    font-size: 1rem !important;
+    text-align: center;
+  }
+
+  /* ── Botones de navegación y vista ── */
+  .fc-button {
+    padding: 6px 10px !important;
+    font-size: 0.75rem !important;
+    border-radius: 8px !important;
+  }
+  .fc-dayGridMonth-button,
+  .fc-timeGridWeek-button,
+  .fc-timeGridDay-button {
+    font-size: 0.7rem !important;
+    padding: 5px 8px !important;
+  }
+
+  /* ── Celdas del mes ── */
+  .fc-daygrid-day {
+    min-height: 52px !important;
+  }
+  .fc-daygrid-day-number {
+    font-size: 0.78rem;
+    padding: 3px 5px !important;
+  }
+  .fc-col-header-cell-cushion {
+    font-size: 0.72rem;
+    padding: 4px 2px !important;
+  }
+
+  /* ── Eventos ── */
+  .fc-event {
+    font-size: 0.68rem !important;
+    padding: 2px 4px !important;
+    border-radius: 5px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Vista semana / día ── */
+  .fc-timegrid-slot {
+    height: 36px !important;
+  }
+  .fc-timegrid-axis {
+    font-size: 0.65rem !important;
+    padding: 0 3px !important;
+    width: 42px !important;
+  }
+
+  /* ── Modal ── */
+  .modal-content {
+    padding: 22px 16px;
+    border-radius: 14px;
+    width: 95%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal h2 {
+    font-size: 1.1rem;
+    margin-bottom: 14px;
+  }
+  .modal .input-group {
+    margin-bottom: 12px;
+  }
+  .modal .input-group label {
+    font-size: 0.85rem;
+  }
+  .modal input,
+  .modal select {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+  .modal .btn-primary,
+  #btn-eliminar-cita {
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+}
+
+/* ── Pantallas muy pequeñas (< 400 px) ── */
+@media (max-width: 400px) {
+  .fc-toolbar-title {
+    font-size: 0.88rem !important;
+  }
+  .fc-button {
+    padding: 5px 7px !important;
+    font-size: 0.68rem !important;
+  }
+  .fc-daygrid-day-number {
+    font-size: 0.7rem;
+  }
+  .fc-event {
+    font-size: 0.6rem !important;
+  }
+  /* En pantallas muy estrechas ocultar semana/día, solo mes */
+  .fc-timeGridWeek-button,
+  .fc-timeGridDay-button {
+    display: none !important;
+  }
+}

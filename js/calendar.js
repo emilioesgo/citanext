@@ -121,15 +121,16 @@ async function cargarCalendario() {
     });
   });
 
+  // En móvil usamos listWeek que es mucho más legible en pantalla estrecha
+  const esMobil = window.innerWidth < 768;
   calendario = new FullCalendar.Calendar(calendarEl, {
-    initialView: 'dayGridMonth',
-    headerToolbar: {
-      left: 'prev,next today',
-      center: 'title',
-      right: 'dayGridMonth,timeGridWeek,timeGridDay'
-    },
+    initialView: esMobil ? 'listWeek' : 'dayGridMonth',
+    headerToolbar: esMobil
+      ? { left: 'prev,next', center: 'title', right: 'listWeek,dayGridMonth' }
+      : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
     locale: 'es',
-    buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día' },
+    buttonText: { today: 'Hoy', month: 'Mes', week: 'Lista', day: 'Día', list: 'Lista' },
+    noEventsText: 'No hay citas esta semana',
     events: eventos,
     editable: false,
     selectable: true,

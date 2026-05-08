@@ -218,3 +218,9 @@ input:focus, textarea:focus {
   font-size: 0.8rem;
   margin-left: 8px;
 }
+.hidden {
+  display: none !important;
+}
+
+/* Color naranja para el nuevo estado del calendario */
+.fc .dia-naranja { background-color: rgba(249,115,22,0.15); }

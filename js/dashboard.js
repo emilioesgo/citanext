@@ -11,16 +11,13 @@ let qrCodeInstance = null;
 let calendarioCitas = null;
 let nombreNegocio = 'Mi Negocio';
 let totalEmpleadosActivos = 1;
-// REFACTOR (Race Condition): bandera para evitar múltiples inicializaciones
 let inicializandoCalendario = false;
 
 const DIAS_SEMANA = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'];
 const NOMBRES_DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
 /* ---------------------------------------------------------------------------
-   FUNCIÓN AUXILIAR XSS (SEGURIDAD)
-   Escapa caracteres HTML para evitar inyección de código malicioso.
-   Usamos esta función en cualquier variable que provenga de Firestore.
+   FUNCIÓN AUXILIAR XSS
    --------------------------------------------------------------------------- */
 function escaparHTML(str) {
   const div = document.createElement('div');
@@ -32,10 +29,7 @@ function escaparHTML(str) {
    AUTENTICACIÓN
    --------------------------------------------------------------------------- */
 onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    window.location.href = 'auth.html';
-    return;
-  }
+  if (!user) { window.location.href = 'auth.html'; return; }
   uid = user.uid;
   await Promise.all([
     cargarPerfil(),
@@ -53,7 +47,7 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 });
 
 /* ---------------------------------------------------------------------------
-   PESTAÑAS – con protección de Race Condition
+   PESTAÑAS (con protección de Race Condition)
    --------------------------------------------------------------------------- */
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -63,8 +57,6 @@ document.querySelectorAll('.tab').forEach(btn => {
     document.getElementById(tabId).classList.add('active');
 
     if (btn.dataset.tab === 'citas') {
-      // REFACTOR (Race Condition): si ya existe el calendario, solo actualizamos;
-      // si no, lo inicializamos UNA SOLA VEZ gracias a la bandera.
       if (calendarioCitas) {
         requestAnimationFrame(() => {
           calendarioCitas.updateSize();
@@ -80,7 +72,7 @@ document.querySelectorAll('.tab').forEach(btn => {
 /* ========================================================================
    PERFIL
    ======================================================================== */
-async function cargarPerfil() { /* sín cambios de lógica, se mantiene igual */ 
+async function cargarPerfil() {
   try {
     const docRef = doc(db, 'negocios', uid);
     const snap = await getDoc(docRef);
@@ -116,7 +108,7 @@ async function cargarPerfil() { /* sín cambios de lógica, se mantiene igual */
   }
 }
 
-document.getElementById('form-perfil').addEventListener('submit', async (e) => { /* sin cambios */ 
+document.getElementById('form-perfil').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
@@ -138,11 +130,8 @@ document.getElementById('form-perfil').addEventListener('submit', async (e) => {
 });
 
 /* ========================================================================
-   SUBIDA DE IMAGEN CON REDIMENSIÓN  (sin cambios)
+   SUBIDA DE IMAGEN CON REDIMENSIÓN
    ======================================================================== */
-// ... (todo el bloque de subirImagen, redimensionarImagen y los listeners
-//      de logo-file y portada-file se mantiene exactamente igual)
-
 async function subirImagen(file, tipo) {
   try {
     const maxWidth = tipo === 'logo' ? 400 : 1200;
@@ -207,7 +196,7 @@ document.getElementById('portada-file').addEventListener('change', (e) => {
 });
 
 /* ========================================================================
-   SERVICIOS (TABLA)  – REFACTOR (XSS)
+   SERVICIOS (TABLA)
    ======================================================================== */
 async function cargarServicios() {
   try {
@@ -220,7 +209,6 @@ async function cargarServicios() {
       const s = docSnap.data();
       const row = document.createElement('tr');
 
-      // REFACTOR (XSS): usar textContent y crear los elementos de forma segura
       const celdaNombre = document.createElement('td');
       const spanColor = document.createElement('span');
       spanColor.style.display = 'inline-block';
@@ -262,7 +250,7 @@ async function cargarServicios() {
   }
 }
 
-async function eliminarServicio(id) { /* sin cambios */ 
+async function eliminarServicio(id) {
   try {
     await deleteDoc(doc(db, 'negocios', uid, 'servicios', id));
     cargarServicios();
@@ -272,7 +260,7 @@ async function eliminarServicio(id) { /* sin cambios */
   }
 }
 
-document.getElementById('form-servicio').addEventListener('submit', async (e) => { /* sin cambios */ 
+document.getElementById('form-servicio').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
@@ -290,9 +278,9 @@ document.getElementById('form-servicio').addEventListener('submit', async (e) =>
 });
 
 /* ========================================================================
-   HORARIOS (sin cambios de funcionalidad)
+   HORARIOS
    ======================================================================== */
-async function cargarHorarios() { /* el código original se mantiene */ 
+async function cargarHorarios() {
   try {
     const docRef = doc(db, 'negocios', uid);
     const snap = await getDoc(docRef);
@@ -330,7 +318,7 @@ async function cargarHorarios() { /* el código original se mantiene */
   }
 }
 
-document.getElementById('form-horario')?.addEventListener('submit', async (e) => { /* sin cambios */ 
+document.getElementById('form-horario')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
@@ -351,7 +339,7 @@ document.getElementById('form-horario')?.addEventListener('submit', async (e) =>
 });
 
 /* ========================================================================
-   EMPLEADOS – REFACTOR (XSS)
+   EMPLEADOS
    ======================================================================== */
 async function cargarEmpleados() {
   try {
@@ -369,7 +357,6 @@ async function cargarEmpleados() {
       const li = document.createElement('li');
       li.dataset.id = docSnap.id;
 
-      // ---- Sección de información (nombre + especialidad)
       const infoDiv = document.createElement('div');
       infoDiv.style.display = 'flex';
       infoDiv.style.alignItems = 'center';
@@ -386,10 +373,8 @@ async function cargarEmpleados() {
       spanEspecialidad.style.fontSize = '0.85rem';
       spanEspecialidad.textContent = emp.especialidad || 'Sin especialidad';
       infoDiv.appendChild(spanEspecialidad);
-
       li.appendChild(infoDiv);
 
-      // ---- Botones de disponibilidad y eliminar
       const accionesDiv = document.createElement('div');
       accionesDiv.style.display = 'flex';
       accionesDiv.style.alignItems = 'center';
@@ -403,9 +388,7 @@ async function cargarEmpleados() {
         ? 'Disponible – clic para marcar como no disponible'
         : 'No disponible – clic para marcar como disponible';
       btnDisponibilidad.textContent = disponible ? '🟢 Disponible' : '🔴 No disponible';
-      btnDisponibilidad.addEventListener('click', () =>
-        toggleDisponibilidadEmpleado(docSnap.id, disponible)
-      );
+      btnDisponibilidad.addEventListener('click', () => toggleDisponibilidadEmpleado(docSnap.id, disponible));
       accionesDiv.appendChild(btnDisponibilidad);
 
       const btnEliminar = document.createElement('button');
@@ -414,8 +397,8 @@ async function cargarEmpleados() {
       btnEliminar.textContent = 'Eliminar';
       btnEliminar.addEventListener('click', () => eliminarEmpleado(docSnap.id));
       accionesDiv.appendChild(btnEliminar);
-
       li.appendChild(accionesDiv);
+
       lista.appendChild(li);
     });
 
@@ -425,7 +408,7 @@ async function cargarEmpleados() {
   }
 }
 
-async function toggleDisponibilidadEmpleado(id, actualDisponible) { /* sin cambios */ 
+async function toggleDisponibilidadEmpleado(id, actualDisponible) {
   try {
     const nuevoEstado = !actualDisponible;
     await updateDoc(doc(db, 'negocios', uid, 'empleados', id), { disponible: nuevoEstado });
@@ -437,7 +420,7 @@ async function toggleDisponibilidadEmpleado(id, actualDisponible) { /* sin cambi
   }
 }
 
-async function eliminarEmpleado(id) { /* sin cambios */ 
+async function eliminarEmpleado(id) {
   try {
     await deleteDoc(doc(db, 'negocios', uid, 'empleados', id));
     await cargarEmpleados();
@@ -448,7 +431,7 @@ async function eliminarEmpleado(id) { /* sin cambios */
   }
 }
 
-document.getElementById('form-empleado').addEventListener('submit', async (e) => { /* sin cambios */ 
+document.getElementById('form-empleado').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
@@ -469,11 +452,9 @@ document.getElementById('form-empleado').addEventListener('submit', async (e) =>
 });
 
 /* ========================================================================
-   CITAS (CALENDARIO)
-   – REFACTOR (OPTIMIZACIÓN, REACTIVIDAD, RACE CONDITION)
+   CITAS (CALENDARIO) – REFACTOR: color por minutos reales
    ======================================================================== */
 function inicializarCalendarioCitas() {
-  // REFACTOR (Race Condition): si ya existe o se está inicializando, salir.
   if (calendarioCitas || inicializandoCalendario) return;
   inicializandoCalendario = true;
 
@@ -491,8 +472,6 @@ function inicializarCalendarioCitas() {
     headerToolbar: { left: 'prev', center: 'title', right: 'next' },
     dateClick: (info) => abrirCitasDelDia(info.date),
     dayCellDidMount: (info) => info.el.classList.add('pendiente'),
-    // REFACTOR (Reactividad): cuando cambie la vista (mes/semana/día) o se navegue,
-    // se recalcula la disponibilidad automáticamente.
     datesSet: () => {
       if (calendarioCitas) {
         requestAnimationFrame(() => {
@@ -516,7 +495,6 @@ async function actualizarDisponibilidadCalendario() {
   if (!calendarioCitas) return;
   try {
     const calendarApi = calendarioCitas;
-    // REFACTOR (Optimización): solo leemos las citas del mes visible
     const activeStart = calendarApi.view.activeStart;
     const activeEnd   = calendarApi.view.activeEnd;
 
@@ -524,7 +502,6 @@ async function actualizarDisponibilidadCalendario() {
     const data = snapNegocio.data() || {};
     const horario = data.horario || {};
 
-    // REFACTOR (Optimización): consulta limitada por rango
     const citasQuery = query(
       collection(db, 'negocios', uid, 'citas'),
       where('fechaHora', '>=', activeStart),
@@ -532,27 +509,24 @@ async function actualizarDisponibilidadCalendario() {
     );
     const citasSnapshot = await getDocs(citasQuery);
 
-    // REFACTOR (Cálculo Real): almacenamos minutos ocupados por día
+    // REFACTOR: suma de minutos reales de cada cita en lugar de contar citas
     const minutosOcupadosPorDia = {};
     citasSnapshot.docs.forEach(d => {
       const c = d.data();
       if (c.estado === 'cancelada') return;
       const fecha = c.fechaHora.toDate();
       const key = fecha.toISOString().split('T')[0];
-      // Asumimos que cada cita tiene el campo 'duracion' (minutos), si no, 30 por defecto
-      const duracionCita = c.duracion || 30;
+      const duracionCita = c.duracion || 30;   // Usamos la duración almacenada
       if (!minutosOcupadosPorDia[key]) minutosOcupadosPorDia[key] = 0;
       minutosOcupadosPorDia[key] += duracionCita;
     });
 
     const diasSemanaJS = ['dom', 'lun', 'mar', 'mie', 'jue', 'vie', 'sab'];
 
-    // Limpiamos clases anteriores
     document.querySelectorAll('.fc-daygrid-day').forEach(el => {
       el.classList.remove('dia-verde', 'dia-amarillo', 'dia-naranja', 'dia-rojo', 'dia-no-laborable');
     });
 
-    // Recorremos los días del mes visible
     for (let d = new Date(activeStart); d < activeEnd; d.setDate(d.getDate() + 1)) {
       const fechaStr = d.toISOString().split('T')[0];
       const diaSem = diasSemanaJS[d.getDay()];
@@ -568,10 +542,11 @@ async function actualizarDisponibilidadCalendario() {
       const [hIni, mIni] = config.inicio.split(':').map(Number);
       const [hFin, mFin] = config.fin.split(':').map(Number);
       const minutosLaboralesDia = (hFin * 60 + mFin) - (hIni * 60 + mIni);
-      // REFACTOR (Cálculo Real): capacidad total = minutos laborales × empleados activos
+      // REFACTOR: capacidad total = minutos laborales × empleados activos
       const capacidadTotalMinutos = minutosLaboralesDia * totalEmpleadosActivos;
       const minutosOcupados = minutosOcupadosPorDia[fechaStr] || 0;
 
+      // Colores basados en porcentaje de ocupación real
       if (minutosOcupados === 0) {
         celda.classList.add('dia-verde');
       } else if (minutosOcupados < capacidadTotalMinutos * 0.5) {
@@ -597,7 +572,6 @@ function abrirCitasDelDia(fecha) {
   container.innerHTML = 'Cargando...';
   modal.classList.remove('hidden');
 
-  // Configuración del cierre del modal (sin cambios)
   const closeBtn = modal.querySelector('.close');
   const cerrarModal = () => modal.classList.add('hidden');
   if (closeBtn) {
@@ -606,10 +580,7 @@ function abrirCitasDelDia(fecha) {
   }
   modal.onclick = (e) => { if (e.target === modal) cerrarModal(); };
   const escapeHandler = (e) => {
-    if (e.key === 'Escape') {
-      cerrarModal();
-      document.removeEventListener('keydown', escapeHandler);
-    }
+    if (e.key === 'Escape') { cerrarModal(); document.removeEventListener('keydown', escapeHandler); }
   };
   document.addEventListener('keydown', escapeHandler);
   const mutationObserver = new MutationObserver(() => {
@@ -642,7 +613,6 @@ function abrirCitasDelDia(fecha) {
       const div = document.createElement('div');
       div.className = 'item-cita';
 
-      // REFACTOR (XSS): usar textContent en lugar de innerHTML con variables crudas
       const spanInfo = document.createElement('span');
       spanInfo.textContent = `${hora} - ${cita.clienteNombre} (${cita.servicioNombre})`;
       div.appendChild(spanInfo);
@@ -673,7 +643,6 @@ function abrirCitasDelDia(fecha) {
       btnReprogramar.onclick = async (e) => {
         const nuevaFecha = prompt('Introduce nueva fecha y hora (YYYY-MM-DD HH:MM)');
         if (nuevaFecha) {
-          // REFACTOR (Validación de fecha): comprobamos que el formato sea válido
           const fechaValida = new Date(nuevaFecha);
           if (isNaN(fechaValida.getTime())) {
             alert('Formato de fecha inválido. Utiliza el formato YYYY-MM-DD HH:MM');
@@ -683,9 +652,11 @@ function abrirCitasDelDia(fecha) {
             const docRef = doc(db, 'negocios', uid, 'citas', e.target.dataset.id);
             const docSnap = await getDoc(docRef);
             const citaOriginal = docSnap.data();
+            // Preservamos la duración original al reprogramar
             await updateDoc(docRef, {
               fechaHora: fechaValida,
-              empleadoId: citaOriginal.empleadoId || null
+              empleadoId: citaOriginal.empleadoId || null,
+              duracion: citaOriginal.duracion || 30
             });
             abrirCitasDelDia(fecha);
             actualizarDisponibilidadCalendario();
@@ -706,9 +677,8 @@ function abrirCitasDelDia(fecha) {
   });
 }
 
-
 /* ========================================================================
-   ENLACES (sin cambios de funcionalidad, XSS no aplica)
+   ENLACES (sin cambios)
    ======================================================================== */
 async function cargarEnlace() {
   try {
@@ -780,7 +750,6 @@ document.getElementById('copiar-enlace')?.addEventListener('click', () => {
   navigator.clipboard.writeText(enlace).then(() => alert('Enlace copiado'));
 });
 
-/* compartir sin cambios */
 document.getElementById('btn-compartir')?.addEventListener('click', () => {
   const enlace = document.getElementById('enlace-publico').value;
   const titulo = `📅 Reserva tu cita en ${nombreNegocio}`;
@@ -803,7 +772,7 @@ document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
 });
 
 /* ---------------------------------------------------------------------------
-   OBSERVER (se mantiene igual)
+   OBSERVER
    --------------------------------------------------------------------------- */
 const tabObserver = new MutationObserver(() => {
   const citasTab = document.getElementById('tab-citas');

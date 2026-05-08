@@ -11,10 +11,41 @@ const formCita = document.getElementById('form-cita');
 const modalTitulo = document.getElementById('modal-titulo');
 const btnEliminar = document.getElementById('btn-eliminar-cita');
 
+// ===== CARGAR DATOS DEL NEGOCIO PARA LA BARRA SUPERIOR =====
+async function cargarDatosNegocio() {
+  try {
+    const docRef = doc(db, 'negocios', uid);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      // Logo
+      const logoImg = document.getElementById('topbar-logo');
+      if (logoImg) {
+        if (data.logoURL) {
+          logoImg.src = data.logoURL;
+          logoImg.style.display = 'inline-block';
+        } else {
+          logoImg.style.display = 'none';
+        }
+      }
+      // Nombre
+      const nombreEl = document.getElementById('topbar-nombre');
+      if (nombreEl) {
+        nombreEl.textContent = data.nombre || 'Citanext';
+      }
+      // Título de la página
+      document.title = (data.nombre || 'Citanext') + ' – Calendario';
+    }
+  } catch (error) {
+    console.error('Error al cargar datos del negocio para la barra:', error);
+  }
+}
+
 // === AUTENTICACIÓN ===
 onAuthStateChanged(auth, async (user) => {
   if (!user) { window.location.href = 'auth.html'; return; }
   uid = user.uid;
+  await cargarDatosNegocio(); // ← Nuevo: actualiza logo y nombre en la barra superior
   cargarCalendario();
   cargarServiciosEnSelect();
   cargarEmpleadosEnSelect();
@@ -73,13 +104,10 @@ async function cargarCalendario() {
 
   citasSnapshot.forEach(citaDoc => {
     const c = citaDoc.data();
-    const servicioId = c.servicioId;
-    // Obtenemos el color del servicio (puede estar en una consulta aparte o lo almacenamos en la cita)
-    // Para simplificar, asumimos que el color se guardó en la cita o lo obtenemos dinámico.
     eventos.push({
       id: citaDoc.id,
       title: `${c.clienteNombre} - ${c.servicioNombre || 'Servicio'}`,
-      start: c.fechaHora.toDate(), // Convertir Timestamp a Date
+      start: c.fechaHora.toDate(),
       backgroundColor: c.color || '#667eea',
       borderColor: c.color || '#667eea',
       extendedProps: {
@@ -103,15 +131,13 @@ async function cargarCalendario() {
     locale: 'es',
     buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', day: 'Día' },
     events: eventos,
-    editable: false, // No permitimos arrastre por simplicidad
+    editable: false,
     selectable: true,
     dateClick: (info) => {
-      // Abrir modal para nueva cita con fecha preseleccionada
       document.getElementById('cita-fecha').value = info.dateStr + 'T09:00';
       modal.classList.remove('hidden');
     },
     eventClick: (info) => {
-      // Editar cita existente
       abrirEdicionCita(info.event);
     }
   });
@@ -128,7 +154,7 @@ function abrirEdicionCita(event) {
   document.getElementById('cita-email').value = props.clienteEmail || '';
   document.getElementById('cita-servicio').value = props.servicioId || '';
   document.getElementById('cita-empleado').value = props.empleadoId || '';
-  // Formatear fecha para input datetime-local
+  
   const fecha = event.start;
   const offset = fecha.getTimezoneOffset();
   const localFecha = new Date(fecha.getTime() - (offset * 60000));
@@ -148,7 +174,11 @@ formCita.addEventListener('submit', async (e) => {
   const empleadoId = document.getElementById('cita-empleado').value;
   const fechaInput = document.getElementById('cita-fecha').value;
 
-  // Obtener nombre y color del servicio
+  if (!servicioId) {
+    alert('Selecciona un servicio.');
+    return;
+  }
+
   const servicioSnap = await getDoc(doc(db, 'negocios', uid, 'servicios', servicioId));
   const servicioData = servicioSnap.data();
   const servicioNombre = servicioData ? servicioData.nombre : '';
@@ -174,7 +204,6 @@ formCita.addEventListener('submit', async (e) => {
     }
     modal.classList.add('hidden');
     resetFormulario();
-    // Recargar el calendario
     calendario.removeAllEvents();
     cargarCalendario();
   } catch (error) {
@@ -193,7 +222,3 @@ btnEliminar.addEventListener('click', async () => {
     cargarCalendario();
   }
 });
-
-// === ENVIAR WHATSAPP (podemos agregar un botón en el modal) ===
-// Añadir después del botón eliminar en el HTML o aquí dinámicamente
-// Pero no lo incluí en el HTML original, así que lo agregaremos en el dashboard de citas.

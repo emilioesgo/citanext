@@ -3,14 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Registro - MiAgenda</title>
+  <title>Citanext – Registro / Inicio de sesión</title>
+
+  <!-- ====== PWA ====== -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+
+  <!-- ====== iOS PWA ====== -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Citanext">
+  <link rel="apple-touch-icon" href="img/icon-192.png">
+
+  <!-- ====== ESTILOS ====== -->
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div class="auth-container">
     <div class="auth-card">
       <div class="auth-header">
-        <h1>📅 MiAgenda</h1>
+        <h1>📅 Citanext</h1>
         <p>Gestión de citas para tu negocio</p>
       </div>
 
@@ -57,5 +69,16 @@
   </div>
 
   <script type="module" src="js/auth.js"></script>
+
+  <!-- ====== REGISTRO DEL SERVICE WORKER ====== -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/citanext/sw.js')
+          .then((registration) => console.log('SW registrado en auth:', registration.scope))
+          .catch((error) => console.log('Error al registrar SW:', error));
+      });
+    }
+  </script>
 </body>
 </html>

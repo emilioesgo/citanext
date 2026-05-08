@@ -15,7 +15,16 @@
   box-shadow: 0 2px 15px rgba(0,0,0,0.05);
   border-bottom: 1px solid #eee;
 }
-
+/* Logo en topbar del calendario */
+.topbar-logo-img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 8px;
+  vertical-align: middle;
+  display: none; /* se muestra solo si hay logo */
+}
 .topbar h1 {
   font-size: 1.8rem;
   font-weight: 600;

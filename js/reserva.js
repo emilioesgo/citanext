@@ -111,10 +111,15 @@ async function cargarEmpleados() {
         const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
         snap.forEach(doc => {
             const e = doc.data();
+            // Solo mostrar empleados disponibles (campo disponible === true o no definido aún)
+            if (e.disponible === false) return;
             const card = document.createElement('div');
             card.className = 'empleado-card seleccionable';
             card.dataset.id = doc.id;
             card.textContent = e.nombre;
+            if (e.especialidad) {
+                card.title = e.especialidad;
+            }
             card.addEventListener('click', () => {
                 document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
                 card.classList.add('seleccionado');

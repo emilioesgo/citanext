@@ -16,7 +16,7 @@ onAuthStateChanged(auth, async (user) => {
   cargarPerfil();
   cargarServicios();
   cargarEmpleados();
-  cargarCitas();
+  inicializarCalendarioCitas(); // ✅ Corrección: ahora sí llamamos al calendario
   cargarEnlace();
   cargarHorarios();
 });
@@ -303,18 +303,15 @@ function abrirCitasDelDia(fecha) {
   const closeBtn = modal.querySelector('.close');
   const cerrarModal = () => modal.classList.add('hidden');
 
-  // Botón X
   if (closeBtn) {
-    closeBtn.replaceWith(closeBtn.cloneNode(true)); // elimina listeners anteriores
+    closeBtn.replaceWith(closeBtn.cloneNode(true));
     modal.querySelector('.close').addEventListener('click', cerrarModal);
   }
 
-  // Clic fuera del contenido (fondo oscuro)
   modal.onclick = (e) => {
     if (e.target === modal) cerrarModal();
   };
 
-  // Tecla Escape
   const escapeHandler = (e) => {
     if (e.key === 'Escape') {
       cerrarModal();
@@ -323,7 +320,6 @@ function abrirCitasDelDia(fecha) {
   };
   document.addEventListener('keydown', escapeHandler);
 
-  // Limpiar el listener de escape cuando se cierre manualmente
   const observer = new MutationObserver(() => {
     if (modal.classList.contains('hidden')) {
       document.removeEventListener('keydown', escapeHandler);
@@ -332,7 +328,7 @@ function abrirCitasDelDia(fecha) {
   });
   observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
 
-  // ---- CARGAR CITAS ----
+  // ---- CARGAR CITAS DEL DÍA ----
   getDocs(query(collection(db, 'negocios', uid, 'citas'), 
     where('fechaHora', '>=', new Date(fechaStr+'T00:00:00')),
     where('fechaHora', '<=', new Date(fechaStr+'T23:59:59'))

@@ -34,8 +34,6 @@ document.querySelectorAll('.tab').forEach(btn => {
     const tabId = `tab-${btn.dataset.tab}`;
     document.getElementById(tabId).classList.add('active');
 
-    // FIX #6: al volver a la pestaña de citas se refresca la disponibilidad en lugar
-    // de intentar re-inicializar (el guard if(calendarioCitas) return lo bloquearía)
     if (btn.dataset.tab === 'citas') {
       if (calendarioCitas) {
         actualizarDisponibilidadCalendario();
@@ -65,7 +63,7 @@ async function cargarPerfil() {
         slug: '',
         createdAt: new Date()
       });
-      await cargarPerfil(); // FIX: await para evitar race condition en la llamada recursiva
+      await cargarPerfil();
       return;
     }
 
@@ -85,7 +83,6 @@ async function cargarPerfil() {
 
 document.getElementById('form-perfil').addEventListener('submit', async (e) => {
   e.preventDefault();
-  // FIX #4: guard por si auth aún no resolvió
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
     const docRef = doc(db, 'negocios', uid);
@@ -103,10 +100,15 @@ document.getElementById('form-perfil').addEventListener('submit', async (e) => {
   }
 });
 
+// ========== SUBIDA DE IMAGEN CON REDIMENSIÓN ==========
 async function subirImagen(file, tipo) {
   try {
+    // Redimensionar antes de subir
+    const maxWidth = tipo === 'logo' ? 400 : 1200;
+    const maxHeight = tipo === 'logo' ? 400 : 400;
+    const redimensionado = await redimensionarImagen(file, maxWidth, maxHeight);
     const storageRef = ref(storage, `negocios/${uid}/${tipo}`);
-    await uploadBytes(storageRef, file);
+    await uploadBytes(storageRef, redimensionado);
     const url = await getDownloadURL(storageRef);
     const docRef = doc(db, 'negocios', uid);
     const snap = await getDoc(docRef);
@@ -122,6 +124,40 @@ async function subirImagen(file, tipo) {
   }
 }
 
+function redimensionarImagen(file, maxWidth, maxHeight) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth || height > maxHeight) {
+          if (width / maxWidth > height / maxHeight) {
+            height = Math.round(height * (maxWidth / width));
+            width = maxWidth;
+          } else {
+            width = Math.round(width * (maxHeight / height));
+            height = maxHeight;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error('No se pudo generar el blob'));
+        }, file.type, 0.85);
+      };
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 document.getElementById('logo-file').addEventListener('change', (e) => {
   if (e.target.files[0]) subirImagen(e.target.files[0], 'logo');
 });
@@ -129,19 +165,25 @@ document.getElementById('portada-file').addEventListener('change', (e) => {
   if (e.target.files[0]) subirImagen(e.target.files[0], 'portada');
 });
 
-// ========== SERVICIOS ==========
+// ========== SERVICIOS (TABLA) ==========
 async function cargarServicios() {
   try {
     const snap = await getDocs(collection(db, 'negocios', uid, 'servicios'));
-    const lista = document.getElementById('lista-servicios');
-    lista.innerHTML = '';
+    const tbody = document.querySelector('#tabla-servicios tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
     snap.forEach(docSnap => {
       const s = docSnap.data();
-      const li = document.createElement('li');
-      li.innerHTML = `<span style="color:${s.color}">● ${s.nombre} | ${s.duracion} min | $${s.precio}</span>
-        <button class="btn-danger" data-id="${docSnap.id}">Eliminar</button>`;
-      li.querySelector('.btn-danger').onclick = () => eliminarServicio(docSnap.id);
-      lista.appendChild(li);
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td><span style="display:inline-block; width:12px; height:12px; border-radius:50%; background:${s.color}; margin-right:8px;"></span>${s.nombre}</td>
+        <td>${s.duracion} min</td>
+        <td>$${s.precio}</td>
+        <td style="text-align:center;">${s.color}</td>
+        <td><button class="btn-danger" data-id="${docSnap.id}">Eliminar</button></td>
+      `;
+      row.querySelector('.btn-danger').onclick = () => eliminarServicio(docSnap.id);
+      tbody.appendChild(row);
     });
   } catch (error) {
     console.error('Error al cargar servicios:', error);
@@ -160,7 +202,7 @@ async function eliminarServicio(id) {
 
 document.getElementById('form-servicio').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
     const nombre = document.getElementById('servicio-nombre').value;
     const duracion = parseInt(document.getElementById('servicio-duracion').value);
@@ -216,7 +258,7 @@ async function cargarHorarios() {
 
 document.getElementById('form-horario')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
     const horario = {};
     DIAS_SEMANA.forEach(dia => {
@@ -266,7 +308,7 @@ async function eliminarEmpleado(id) {
 
 document.getElementById('form-empleado').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
     const nombre = document.getElementById('empleado-nombre').value;
     const especialidad = document.getElementById('empleado-especialidad').value;
@@ -279,7 +321,7 @@ document.getElementById('form-empleado').addEventListener('submit', async (e) =>
   }
 });
 
-// ========== CITAS (CALENDARIO DE DISPONIBILIDAD) ==========
+// ========== CITAS (CALENDARIO) ==========
 function inicializarCalendarioCitas() {
   if (calendarioCitas) return;
   const calendarioEl = document.getElementById('calendario-citas');
@@ -287,11 +329,11 @@ function inicializarCalendarioCitas() {
   calendarioCitas = new FullCalendar.Calendar(calendarioEl, {
     initialView: 'dayGridMonth',
     locale: 'es',
+    height: 'auto',
+    contentHeight: 580,
     headerToolbar: { left: 'prev', center: 'title', right: 'next' },
     dateClick: (info) => abrirCitasDelDia(info.date),
-    dayCellDidMount: (info) => {
-      info.el.classList.add('pendiente');
-    }
+    dayCellDidMount: (info) => info.el.classList.add('pendiente')
   });
   calendarioCitas.render();
   actualizarDisponibilidadCalendario();
@@ -345,11 +387,10 @@ async function actualizarDisponibilidadCalendario() {
       const maxCitas = Math.floor(minutosTotales / 30);
       const citasHoy = (citasPorDia[fechaStr] || []).length;
 
-      // FIX #3: tres estados diferenciados en lugar de dos ramas iguales en rojo
       if (citasHoy === 0)                        celda.classList.add('dia-verde');
       else if (citasHoy < maxCitas / 2)           celda.classList.add('dia-amarillo');
-      else if (citasHoy < maxCitas)               celda.classList.add('dia-naranja'); // casi lleno
-      else                                        celda.classList.add('dia-rojo');    // completamente lleno
+      else if (citasHoy < maxCitas)               celda.classList.add('dia-naranja');
+      else                                        celda.classList.add('dia-rojo');
     }
   } catch (error) {
     console.error('Error al actualizar disponibilidad del calendario:', error);
@@ -366,7 +407,6 @@ function abrirCitasDelDia(fecha) {
   container.innerHTML = 'Cargando...';
   modal.classList.remove('hidden');
 
-  // ---- CONFIGURAR CIERRE DEL MODAL ----
   const closeBtn = modal.querySelector('.close');
   const cerrarModal = () => modal.classList.add('hidden');
 
@@ -374,19 +414,12 @@ function abrirCitasDelDia(fecha) {
     closeBtn.replaceWith(closeBtn.cloneNode(true));
     modal.querySelector('.close').addEventListener('click', cerrarModal);
   }
-
-  modal.onclick = (e) => {
-    if (e.target === modal) cerrarModal();
-  };
+  modal.onclick = (e) => { if (e.target === modal) cerrarModal(); };
 
   const escapeHandler = (e) => {
-    if (e.key === 'Escape') {
-      cerrarModal();
-      document.removeEventListener('keydown', escapeHandler);
-    }
+    if (e.key === 'Escape') { cerrarModal(); document.removeEventListener('keydown', escapeHandler); }
   };
   document.addEventListener('keydown', escapeHandler);
-
   const mutationObserver = new MutationObserver(() => {
     if (modal.classList.contains('hidden')) {
       document.removeEventListener('keydown', escapeHandler);
@@ -395,12 +428,10 @@ function abrirCitasDelDia(fecha) {
   });
   mutationObserver.observe(modal, { attributes: true, attributeFilter: ['class'] });
 
-  // ---- CARGAR CITAS DEL DÍA ----
-  // FIX #2: construcción de rangos con setHours para respetar zona horaria local
   const inicioDia = new Date(fecha);
-  inicioDia.setHours(0, 0, 0, 0);
+  inicioDia.setHours(0,0,0,0);
   const finDia = new Date(fecha);
-  finDia.setHours(23, 59, 59, 999);
+  finDia.setHours(23,59,59,999);
 
   getDocs(query(
     collection(db, 'negocios', uid, 'citas'),
@@ -427,8 +458,6 @@ function abrirCitasDelDia(fecha) {
       container.appendChild(div);
     });
 
-    // FIX #1: container.querySelectorAll en lugar de document.querySelectorAll
-    // para no afectar botones con el mismo nombre fuera del modal
     container.querySelectorAll('.btn-cancelar').forEach(b => {
       b.onclick = async (e) => {
         if (confirm('¿Cancelar esta cita?')) {
@@ -443,8 +472,6 @@ function abrirCitasDelDia(fecha) {
         }
       };
     });
-
-    // FIX #1: container.querySelectorAll en lugar de document.querySelectorAll
     container.querySelectorAll('.btn-reprogramar').forEach(b => {
       b.onclick = async (e) => {
         const nuevaFecha = prompt('Introduce nueva fecha y hora (YYYY-MM-DD HH:MM)');
@@ -474,15 +501,12 @@ async function cargarEnlace() {
     const docRef = doc(db, 'negocios', uid);
     const snap = await getDoc(docRef);
     if (!snap.exists()) return;
-
     const data = snap.data();
     const slug = data.slug || '';
     const slugInput = document.getElementById('slug-input');
     if (slugInput) slugInput.value = slug;
     actualizarEnlaceMostrado(slug);
-  } catch (error) {
-    console.error('Error al cargar enlace:', error);
-  }
+  } catch (error) { console.error('Error al cargar enlace:', error); }
 }
 
 function actualizarEnlaceMostrado(slug) {
@@ -509,38 +533,25 @@ function generarQR(texto) {
 }
 
 document.getElementById('btn-guardar-slug').addEventListener('click', async () => {
-  if (!uid) return alert('Sesión no iniciada. Recarga la página.'); // FIX #4
+  if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   const slugInput = document.getElementById('slug-input');
   let slug = slugInput.value.trim().toLowerCase();
-
   if (slug === '') {
-    try {
-      await updateDoc(doc(db, 'negocios', uid), { slug: '' });
-      actualizarEnlaceMostrado('');
-      alert('Slug eliminado. Se usará tu identificador único.');
-    } catch (error) {
-      console.error('Error al eliminar slug:', error);
-      alert('No se pudo eliminar el slug.');
-    }
+    await updateDoc(doc(db, 'negocios', uid), { slug: '' });
+    actualizarEnlaceMostrado('');
+    alert('Slug eliminado. Se usará tu identificador único.');
     return;
   }
-
   if (!/^[a-z0-9\-]{3,30}$/.test(slug)) {
     alert('El slug solo puede contener letras minúsculas, números y guiones. Entre 3 y 30 caracteres.');
     return;
   }
-
   try {
     const q = query(collection(db, 'negocios'), where('slug', '==', slug));
     const snap = await getDocs(q);
     let duplicado = false;
-    snap.forEach(docSnap => {
-      if (docSnap.id !== uid) duplicado = true;
-    });
-    if (duplicado) {
-      alert('Este identificador ya está en uso. Elige otro.');
-      return;
-    }
+    snap.forEach(docSnap => { if (docSnap.id !== uid) duplicado = true; });
+    if (duplicado) { alert('Este identificador ya está en uso. Elige otro.'); return; }
     await updateDoc(doc(db, 'negocios', uid), { slug });
     actualizarEnlaceMostrado(slug);
     alert('¡Slug guardado! Tu enlace personalizado está listo.');
@@ -559,9 +570,7 @@ document.getElementById('btn-compartir')?.addEventListener('click', () => {
   const enlace = document.getElementById('enlace-publico').value;
   if (navigator.share) {
     navigator.share({ title: 'Reserva tu cita', text: 'Agenda conmigo', url: enlace }).catch(() => {});
-  } else {
-    alert('Compartir no soportado en este navegador. Copia el enlace.');
-  }
+  } else alert('Compartir no soportado en este navegador. Copia el enlace.');
 });
 
 document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
@@ -573,18 +582,12 @@ document.getElementById('btn-descargar-qr')?.addEventListener('click', () => {
   link.click();
 });
 
-// ========== OBSERVER PARA PESTAÑA CITAS ==========
-// FIX #6: al detectar que la pestaña se activa, se refresca la disponibilidad
-// si el calendario ya existe, en lugar de llamar a inicializarCalendarioCitas
-// que quedaría bloqueada por el guard interno
+// Observer para pestaña de citas
 const tabObserver = new MutationObserver(() => {
   const citasTab = document.getElementById('tab-citas');
   if (citasTab?.classList.contains('active')) {
-    if (calendarioCitas) {
-      actualizarDisponibilidadCalendario();
-    } else {
-      setTimeout(inicializarCalendarioCitas, 100);
-    }
+    if (calendarioCitas) actualizarDisponibilidadCalendario();
+    else setTimeout(inicializarCalendarioCitas, 100);
   }
 });
 const tabCitasEl = document.getElementById('tab-citas');

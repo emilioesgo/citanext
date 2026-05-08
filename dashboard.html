@@ -72,12 +72,12 @@
         <div>
           <label>Logo (recomendado 200x200)</label>
           <input type="file" id="logo-file" accept="image/*">
-          <img id="logo-preview" class="preview-img" src="" alt="Logo">
+          <img id="logo-preview" class="preview-img logo-preview" src="" alt="Logo">
         </div>
         <div>
           <label>Portada (recomendado 800x300)</label>
           <input type="file" id="portada-file" accept="image/*">
-          <img id="portada-preview" class="preview-img" src="" alt="Portada">
+          <img id="portada-preview" class="preview-img portada-preview" src="" alt="Portada">
         </div>
       </div>
     </section>
@@ -92,15 +92,27 @@
         <input type="color" id="servicio-color" value="#667eea">
         <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Agregar</button>
       </form>
-      <ul id="lista-servicios" class="item-list"></ul>
 
-      <!-- NUEVO: Horario de trabajo -->
+      <div class="table-responsive">
+        <table id="tabla-servicios" class="servicios-table">
+          <thead>
+            <tr>
+              <th>Servicio</th>
+              <th>Duración</th>
+              <th>Precio</th>
+              <th>Color</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- Horario de trabajo -->
       <h2>📅 Horario de trabajo</h2>
       <p>Define tu jornada laboral por día de la semana y los días no laborables.</p>
       <form id="form-horario">
-        <div id="dias-horario" class="horario-grid">
-          <!-- Se generará dinámicamente con JavaScript -->
-        </div>
+        <div id="dias-horario" class="horario-grid"></div>
         <button type="submit" class="btn-primary" style="margin-top:20px;"><i class="fa-solid fa-save"></i> Guardar horarios</button>
       </form>
     </section>
@@ -119,10 +131,11 @@
     <!-- ========== SECCIÓN CITAS ========== -->
     <section id="tab-citas" class="tab-content">
       <h2><i class="fa-solid fa-table-cells"></i> Calendario de disponibilidad</h2>
-      <div id="calendario-citas"></div>
+      <div id="calendario-citas" class="calendario-contenedor"></div>
       <p class="leyenda">
         <span class="dot verde"></span> Disponible
         <span class="dot amarillo"></span> Medio
+        <span class="dot naranja"></span> Casi lleno
         <span class="dot rojo"></span> Lleno
         <span class="dot gris"></span> Sin laborar
       </p>

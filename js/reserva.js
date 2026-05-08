@@ -17,7 +17,7 @@ let empleadoSeleccionado = null;
 let fechaSeleccionada = null;
 let horarioSeleccionado = null;
 let miniCalendario = null;
-let timeoutCargaHorarios = null; // Para el timeout de seguridad
+let cargandoHorarios = false;   // Bandera para el timeout (solución al bug #3)
 
 const pasos = document.querySelectorAll('.paso');
 let pasoActual = 0;
@@ -138,8 +138,10 @@ function inicializarCalendario() {
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
         selectable: false,
         dayCellDidMount: (info) => {
-            // Marcar días no laborables según la configuración del negocio
-            const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][info.date.getDay()];
+            // SOLUCIÓN BUG #2: usamos info.dateStr y forzamos una hora local para evitar
+            // desplazamientos UTC en Safari móvil.
+            const fechaLocal = new Date(info.dateStr + 'T12:00:00');
+            const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fechaLocal.getDay()];
             const horario = datosNegocio.horario || {};
             const config = horario[diaSem] || { abierto: true };
             if (!config.abierto) {
@@ -148,8 +150,9 @@ function inicializarCalendario() {
             }
         },
         dateClick: async (info) => {
-            // Verificar si el día es laborable
-            const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][info.date.getDay()];
+            // SOLUCIÓN BUG #2: usamos la misma técnica para verificar el día laborable.
+            const fechaLocal = new Date(info.dateStr + 'T12:00:00');
+            const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fechaLocal.getDay()];
             const config = (datosNegocio.horario || {})[diaSem] || { abierto: true };
             if (!config.abierto) {
                 alert('Lo sentimos, no laboramos este día.');
@@ -158,7 +161,7 @@ function inicializarCalendario() {
             // Solo permitir fechas desde hoy
             const hoy = new Date();
             hoy.setHours(0,0,0,0);
-            if (info.date < hoy) {
+            if (fechaLocal < hoy) {
                 alert('No puedes seleccionar una fecha pasada.');
                 return;
             }
@@ -173,38 +176,50 @@ function inicializarCalendario() {
 // ==================== HORARIOS DISPONIBLES ====================
 async function cargarHorariosDisponibles(fechaStr) {
     const slotsContainer = document.getElementById('slots-horarios');
-    // Limpiar cualquier timeout anterior
-    if (timeoutCargaHorarios) clearTimeout(timeoutCargaHorarios);
-
-    // Mostrar spinner
-    slotsContainer.innerHTML = '<div class="spinner"></div> Buscando horarios...';
+    
+    // Limpiar cualquier operación anterior
+    if (cargandoHorarios) {
+        // Ya hay una carga en curso, no hacemos nada o podríamos cancelarla
+        // Por simplicidad, no encolamos.
+        return;
+    }
+    cargandoHorarios = true;
     horarioSeleccionado = null;
     document.getElementById('btn-siguiente-paso3').disabled = true;
 
-    // Timeout de seguridad (12 segundos)
-    timeoutCargaHorarios = setTimeout(() => {
-        if (slotsContainer.innerHTML.includes('Buscando horarios')) {
+    // Mostrar spinner
+    slotsContainer.innerHTML = '<div class="spinner"></div> Buscando horarios...';
+
+    // Timeout de seguridad (12 segundos) - SOLUCIÓN BUG #3 con bandera
+    const timeoutId = setTimeout(() => {
+        if (cargandoHorarios) {
             slotsContainer.innerHTML = `
                 <p style="color: #b91c1c;">No se pudieron cargar los horarios. 
-                <button onclick="location.reload()" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
-            document.getElementById('btn-siguiente-paso3').disabled = true;
+                <button id="retry-horarios" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
+            document.getElementById('retry-horarios')?.addEventListener('click', () => {
+                cargarHorariosDisponibles(fechaStr);
+            });
+            cargandoHorarios = false;
         }
     }, 12000);
 
     try {
         if (!servicioSeleccionado) {
             slotsContainer.innerHTML = 'Selecciona un servicio primero.';
+            cargandoHorarios = false;
+            clearTimeout(timeoutId);
             return;
         }
         const duracion = servicioSeleccionado.duracion; // minutos
 
-        // Obtener jornada del día seleccionado
-        const fecha = new Date(fechaStr + 'T00:00:00');
+        // Obtener jornada del día seleccionado (fecha local)
+        const fecha = new Date(fechaStr + 'T12:00:00'); // mediodía para evitar problemas de zona
         const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
         const horarioNegocio = (datosNegocio.horario || {})[diaSem] || { abierto: true, inicio: '09:00', fin: '18:00' };
         if (!horarioNegocio.abierto) {
             slotsContainer.innerHTML = 'No laboramos este día.';
-            clearTimeout(timeoutCargaHorarios);
+            cargandoHorarios = false;
+            clearTimeout(timeoutId);
             return;
         }
 
@@ -213,20 +228,28 @@ async function cargarHorariosDisponibles(fechaStr) {
         const inicioMinutos = hIni * 60 + mIni;
         const finMinutos = hFin * 60 + mFin;
 
-        // Obtener citas del día
+        // Rango de tiempo del día seleccionado (local)
         const inicioDia = new Date(fechaStr + 'T00:00:00');
         const finDia = new Date(fechaStr + 'T23:59:59');
-        const citasSnap = await getDocs(collection(db, 'negocios', negocioId, 'citas'));
+
+        // SOLUCIÓN BUG #1: usamos una consulta con filtro por fecha en Firestore
+        // para solo descargar las citas del día, no todas.
+        const citasQuery = query(
+            collection(db, 'negocios', negocioId, 'citas'),
+            where('fechaHora', '>=', inicioDia),
+            where('fechaHora', '<=', finDia)
+        );
+        const citasSnap = await getDocs(citasQuery);
+
         const ocupados = [];
         citasSnap.forEach(citaDoc => {
             const c = citaDoc.data();
+            if (c.estado === 'cancelada') return;
             const fechaCita = c.fechaHora.toDate();
-            if (fechaCita >= inicioDia && fechaCita <= finDia && c.estado !== 'cancelada') {
-                ocupados.push({
-                    inicio: fechaCita.getHours() * 60 + fechaCita.getMinutes(),
-                    duracion: c.duracion || duracion
-                });
-            }
+            ocupados.push({
+                inicio: fechaCita.getHours() * 60 + fechaCita.getMinutes(),
+                duracion: c.duracion || duracion
+            });
         });
 
         // Generar slots cada 30 min
@@ -260,10 +283,14 @@ async function cargarHorariosDisponibles(fechaStr) {
         }
     } catch (error) {
         console.error('Error al cargar horarios:', error);
-        slotsContainer.innerHTML = `<p style="color: #b91c1c;">Error al cargar horarios. 
-        <button onclick="cargarHorariosDisponibles('${fechaStr}')" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
+        slotsContainer.innerHTML = `<p style="color: #b91c1c;">Error al cargar horarios: ${error.message}. 
+        <button id="retry-horarios" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
+        document.getElementById('retry-horarios')?.addEventListener('click', () => {
+            cargarHorariosDisponibles(fechaStr);
+        });
     } finally {
-        clearTimeout(timeoutCargaHorarios);
+        cargandoHorarios = false;
+        clearTimeout(timeoutId);
     }
 }
 

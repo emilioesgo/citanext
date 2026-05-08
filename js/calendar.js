@@ -1,6 +1,6 @@
 import { auth, db } from './firebase-config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, getDocs, collection, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, getDocs, collection, addDoc, updateDoc, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 let uid, calendario;
 let citaEditandoId = null; // Guarda el ID si estamos editando
@@ -45,8 +45,8 @@ async function cargarDatosNegocio() {
 onAuthStateChanged(auth, async (user) => {
   if (!user) { window.location.href = 'auth.html'; return; }
   uid = user.uid;
-  await cargarDatosNegocio(); // ← Nuevo: actualiza logo y nombre en la barra superior
-  cargarCalendario();
+  await cargarDatosNegocio(); // ← Actualiza logo y nombre en la barra superior
+  inicializarCalendario();    // REFACTOR: solo se inicializa una vez, sin recargas masivas
   cargarServiciosEnSelect();
   cargarEmpleadosEnSelect();
 });
@@ -96,12 +96,56 @@ async function cargarEmpleadosEnSelect() {
   });
 }
 
-// === CARGAR CALENDARIO ===
-async function cargarCalendario() {
+// ======================================================================
+// INICIALIZAR CALENDARIO (REFACTOR: paginación automática con events como función)
+// ======================================================================
+function inicializarCalendario() {
   const calendarEl = document.getElementById('calendar');
-  const citasSnapshot = await getDocs(collection(db, 'negocios', uid, 'citas'));
-  const eventos = [];
+  if (!calendarEl) return;
 
+  const esMobil = window.innerWidth < 768;
+
+  calendario = new FullCalendar.Calendar(calendarEl, {
+    initialView: esMobil ? 'listWeek' : 'dayGridMonth',
+    headerToolbar: esMobil
+      ? { left: 'prev,next', center: 'title', right: 'listWeek,dayGridMonth' }
+      : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
+    locale: 'es',
+    buttonText: { today: 'Hoy', month: 'Mes', week: 'Lista', day: 'Día', list: 'Lista' },
+    noEventsText: 'No hay citas esta semana',
+    editable: false,
+    selectable: true,
+    // REFACTOR: 'events' como función asíncrona → paginación real
+    events: async (fetchInfo, successCallback, failureCallback) => {
+      try {
+        const eventos = await cargarEventosEnRango(fetchInfo.start, fetchInfo.end);
+        successCallback(eventos);
+      } catch (error) {
+        console.error('Error al cargar eventos del calendario:', error);
+        failureCallback(error);
+      }
+    },
+    dateClick: (info) => {
+      document.getElementById('cita-fecha').value = info.dateStr + 'T09:00';
+      modal.classList.remove('hidden');
+    },
+    eventClick: (info) => {
+      abrirEdicionCita(info.event);
+    }
+  });
+
+  calendario.render();
+}
+
+// REFACTOR: carga únicamente las citas del rango visible (paginación real)
+async function cargarEventosEnRango(start, end) {
+  const citasQuery = query(
+    collection(db, 'negocios', uid, 'citas'),
+    where('fechaHora', '>=', start),
+    where('fechaHora', '<=', end)
+  );
+  const citasSnapshot = await getDocs(citasQuery);
+  const eventos = [];
   citasSnapshot.forEach(citaDoc => {
     const c = citaDoc.data();
     eventos.push({
@@ -116,33 +160,12 @@ async function cargarCalendario() {
         clienteEmail: c.clienteEmail || '',
         servicioId: c.servicioId,
         empleadoId: c.empleadoId || '',
+        duracion: c.duracion || 30,          // REFACTOR: duración real disponible
         color: c.color || '#667eea'
       }
     });
   });
-
-  // En móvil usamos listWeek que es mucho más legible en pantalla estrecha
-  const esMobil = window.innerWidth < 768;
-  calendario = new FullCalendar.Calendar(calendarEl, {
-    initialView: esMobil ? 'listWeek' : 'dayGridMonth',
-    headerToolbar: esMobil
-      ? { left: 'prev,next', center: 'title', right: 'listWeek,dayGridMonth' }
-      : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,timeGridDay' },
-    locale: 'es',
-    buttonText: { today: 'Hoy', month: 'Mes', week: 'Lista', day: 'Día', list: 'Lista' },
-    noEventsText: 'No hay citas esta semana',
-    events: eventos,
-    editable: false,
-    selectable: true,
-    dateClick: (info) => {
-      document.getElementById('cita-fecha').value = info.dateStr + 'T09:00';
-      modal.classList.remove('hidden');
-    },
-    eventClick: (info) => {
-      abrirEdicionCita(info.event);
-    }
-  });
-  calendario.render();
+  return eventos;
 }
 
 // === ABRIR MODAL PARA EDITAR ===
@@ -165,7 +188,9 @@ function abrirEdicionCita(event) {
   modal.classList.remove('hidden');
 }
 
-// === GUARDAR CITA (CREAR O EDITAR) ===
+// ======================================================================
+// GUARDAR CITA (CREAR O EDITAR) – REFACTOR: duración guardada + API local
+// ======================================================================
 formCita.addEventListener('submit', async (e) => {
   e.preventDefault();
   const clienteNombre = document.getElementById('cita-cliente').value;
@@ -184,6 +209,7 @@ formCita.addEventListener('submit', async (e) => {
   const servicioData = servicioSnap.data();
   const servicioNombre = servicioData ? servicioData.nombre : '';
   const color = servicioData ? servicioData.color : '#667eea';
+  const duracion = servicioData?.duracion || 30;   // REFACTOR: extraemos duración real
 
   const citaData = {
     clienteNombre,
@@ -193,33 +219,70 @@ formCita.addEventListener('submit', async (e) => {
     servicioNombre,
     empleadoId: empleadoId || null,
     fechaHora: new Date(fechaInput),
+    duracion,                 // REFACTOR: guardamos duración en Firestore
     color,
     estado: 'confirmada'
   };
 
   try {
     if (citaEditandoId) {
+      // Editar cita existente
       await updateDoc(doc(db, 'negocios', uid, 'citas', citaEditandoId), citaData);
+      // REFACTOR: actualizar evento en el calendario sin recargar todo
+      const evento = calendario.getEventById(citaEditandoId);
+      if (evento) {
+        evento.setProp('title', `${clienteNombre} - ${servicioNombre}`);
+        evento.setStart(citaData.fechaHora);
+        evento.setExtendedProp('clienteNombre', clienteNombre);
+        evento.setExtendedProp('servicioId', servicioId);
+        evento.setExtendedProp('empleadoId', empleadoId || null);
+        evento.setExtendedProp('duracion', duracion);
+      }
     } else {
-      await addDoc(collection(db, 'negocios', uid, 'citas'), citaData);
+      // Nueva cita
+      const docRef = await addDoc(collection(db, 'negocios', uid, 'citas'), citaData);
+      // REFACTOR: agregar evento directamente al calendario
+      calendario.addEvent({
+        id: docRef.id,
+        title: `${clienteNombre} - ${servicioNombre}`,
+        start: citaData.fechaHora,
+        backgroundColor: color,
+        borderColor: color,
+        extendedProps: {
+          clienteNombre,
+          clienteTelefono,
+          clienteEmail,
+          servicioId,
+          empleadoId: empleadoId || null,
+          duracion,
+          color
+        }
+      });
     }
     modal.classList.add('hidden');
     resetFormulario();
-    calendario.removeAllEvents();
-    cargarCalendario();
+    // NOTA: ya no se llama a removeAllEvents() ni a cargarCalendario()
   } catch (error) {
     alert('Error al guardar: ' + error.message);
   }
 });
 
-// === ELIMINAR CITA ===
+// ======================================================================
+// ELIMINAR CITA – REFACTOR: eliminación local sin recargar todo el calendario
+// ======================================================================
 btnEliminar.addEventListener('click', async () => {
   if (!citaEditandoId) return;
   if (confirm('¿Eliminar esta cita?')) {
-    await deleteDoc(doc(db, 'negocios', uid, 'citas', citaEditandoId));
-    modal.classList.add('hidden');
-    resetFormulario();
-    calendario.removeAllEvents();
-    cargarCalendario();
+    try {
+      await deleteDoc(doc(db, 'negocios', uid, 'citas', citaEditandoId));
+      // REFACTOR: eliminar evento del calendario directamente
+      const evento = calendario.getEventById(citaEditandoId);
+      if (evento) evento.remove();
+      modal.classList.add('hidden');
+      resetFormulario();
+      // NOTA: ya no se llama a removeAllEvents() ni a cargarCalendario()
+    } catch (error) {
+      alert('Error al eliminar: ' + error.message);
+    }
   }
 });

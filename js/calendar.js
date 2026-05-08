@@ -189,6 +189,54 @@ function abrirEdicionCita(event) {
 }
 
 // ======================================================================
+// NUEVO: Función validadora de disponibilidad
+// Devuelve true si el horario está libre, false si hay colisión.
+// ======================================================================
+async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIgnorarId = null) {
+  // Calculamos el fin de la nueva cita
+  const inicioNuevo = fechaInicio.getTime();
+  const finNuevo = new Date(inicioNuevo + duracion * 60000);
+
+  // Rango del día de la nueva cita
+  const inicioDia = new Date(fechaInicio);
+  inicioDia.setHours(0, 0, 0, 0);
+  const finDia = new Date(fechaInicio);
+  finDia.setHours(23, 59, 59, 999);
+
+  // Consultamos solo las citas de ese día (eficiencia)
+  const citasQuery = query(
+    collection(db, 'negocios', uid, 'citas'),
+    where('fechaHora', '>=', inicioDia),
+    where('fechaHora', '<=', finDia)
+  );
+  const snapshot = await getDocs(citasQuery);
+
+  for (const citaDoc of snapshot.docs) {
+    const cita = citaDoc.data();
+
+    // Ignoramos la cita que se está editando
+    if (citaDoc.id === citaIgnorarId) continue;
+
+    // Solo nos importan las citas del mismo empleado (o sin empleado si la nueva va sin empleado)
+    const citaEmpleadoId = cita.empleadoId || null;
+    const nuevoEmpleadoId = empleadoId || null;
+    if (citaEmpleadoId !== nuevoEmpleadoId) continue;
+
+    // Calculamos el fin de la cita existente
+    const inicioExistente = cita.fechaHora.toDate().getTime();
+    const duracionExistente = (cita.duracion || 30) * 60000;
+    const finExistente = new Date(inicioExistente + duracionExistente);
+
+    // Fórmula de colisión: InicioNuevo < FinExistente && FinNuevo > InicioExistente
+    if (inicioNuevo < finExistente.getTime() && finNuevo.getTime() > inicioExistente) {
+      return false; // Hay choque
+    }
+  }
+
+  return true; // Horario libre
+}
+
+// ======================================================================
 // GUARDAR CITA (CREAR O EDITAR) – REFACTOR: duración guardada + API local
 // ======================================================================
 formCita.addEventListener('submit', async (e) => {
@@ -211,6 +259,22 @@ formCita.addEventListener('submit', async (e) => {
   const color = servicioData ? servicioData.color : '#667eea';
   const duracion = servicioData?.duracion || 30;   // REFACTOR: extraemos duración real
 
+  const fechaHora = new Date(fechaInput);
+
+  // ----- NUEVO: Validación de disponibilidad antes de guardar -----
+  const disponible = await verificarDisponibilidad(
+    fechaHora,
+    duracion,
+    empleadoId || null,
+    citaEditandoId  // si estamos editando, ignoramos esta misma cita
+  );
+
+  if (!disponible) {
+    alert('El empleado ya tiene una cita en ese horario. Elige otra hora o empleado.');
+    return;
+  }
+  // ----------------------------------------------------------------
+
   const citaData = {
     clienteNombre,
     clienteTelefono,
@@ -218,8 +282,8 @@ formCita.addEventListener('submit', async (e) => {
     servicioId,
     servicioNombre,
     empleadoId: empleadoId || null,
-    fechaHora: new Date(fechaInput),
-    duracion,                 // REFACTOR: guardamos duración en Firestore
+    fechaHora,
+    duracion,
     color,
     estado: 'confirmada'
   };

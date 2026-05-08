@@ -17,7 +17,7 @@ let empleadoSeleccionado = null;
 let fechaSeleccionada = null;
 let horarioSeleccionado = null;
 let miniCalendario = null;
-let cargandoHorarios = false;   // Bandera para el timeout (solución al bug #3)
+let cargandoHorarios = false;
 
 const pasos = document.querySelectorAll('.paso');
 let pasoActual = 0;
@@ -32,15 +32,12 @@ function mostrarPaso(indice) {
 // ==================== BUSCAR NEGOCIO ====================
 async function cargarNegocio() {
     try {
-        // 1. Intentar como UID directo
         let snap = await getDoc(doc(db, 'negocios', identificador));
         if (snap.exists()) {
             negocioId = identificador;
             procesarNegocio(snap.data());
             return;
         }
-
-        // 2. Buscar por slug
         const q = query(collection(db, 'negocios'), where('slug', '==', identificador));
         const querySnap = await getDocs(q);
         if (!querySnap.empty) {
@@ -96,9 +93,7 @@ async function cargarServicios() {
 // ==================== EMPLEADOS ====================
 async function cargarEmpleados() {
     const container = document.getElementById('lista-empleados');
-    // Limpiar manteniendo solo el "Cualquiera"
     container.querySelectorAll('.empleado-card:not([data-id=""])').forEach(c => c.remove());
-
     const cualquiera = container.querySelector('.empleado-card[data-id=""]');
     cualquiera.classList.add('seleccionado');
     cualquiera.onclick = () => {
@@ -106,20 +101,16 @@ async function cargarEmpleados() {
         cualquiera.classList.add('seleccionado');
         empleadoSeleccionado = null;
     };
-
     try {
         const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
         snap.forEach(doc => {
             const e = doc.data();
-            // Solo mostrar empleados disponibles (campo disponible === true o no definido aún)
             if (e.disponible === false) return;
             const card = document.createElement('div');
             card.className = 'empleado-card seleccionable';
             card.dataset.id = doc.id;
             card.textContent = e.nombre;
-            if (e.especialidad) {
-                card.title = e.especialidad;
-            }
+            if (e.especialidad) card.title = e.especialidad;
             card.addEventListener('click', () => {
                 document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
                 card.classList.add('seleccionado');
@@ -143,8 +134,6 @@ function inicializarCalendario() {
         headerToolbar: { left: 'prev', center: 'title', right: 'next' },
         selectable: false,
         dayCellDidMount: (info) => {
-            // SOLUCIÓN BUG #2: usamos info.dateStr y forzamos una hora local para evitar
-            // desplazamientos UTC en Safari móvil.
             const fechaLocal = new Date(info.dateStr + 'T12:00:00');
             const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fechaLocal.getDay()];
             const horario = datosNegocio.horario || {};
@@ -155,7 +144,6 @@ function inicializarCalendario() {
             }
         },
         dateClick: async (info) => {
-            // SOLUCIÓN BUG #2: usamos la misma técnica para verificar el día laborable.
             const fechaLocal = new Date(info.dateStr + 'T12:00:00');
             const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fechaLocal.getDay()];
             const config = (datosNegocio.horario || {})[diaSem] || { abierto: true };
@@ -163,7 +151,6 @@ function inicializarCalendario() {
                 alert('Lo sentimos, no laboramos este día.');
                 return;
             }
-            // Solo permitir fechas desde hoy
             const hoy = new Date();
             hoy.setHours(0,0,0,0);
             if (fechaLocal < hoy) {
@@ -178,32 +165,23 @@ function inicializarCalendario() {
     miniCalendario.render();
 }
 
-// ==================== HORARIOS DISPONIBLES ====================
+// ==================== HORARIOS DISPONIBLES (CORREGIDO) ====================
 async function cargarHorariosDisponibles(fechaStr) {
     const slotsContainer = document.getElementById('slots-horarios');
     
-    // Limpiar cualquier operación anterior
-    if (cargandoHorarios) {
-        // Ya hay una carga en curso, no hacemos nada o podríamos cancelarla
-        // Por simplicidad, no encolamos.
-        return;
-    }
+    if (cargandoHorarios) return;
     cargandoHorarios = true;
     horarioSeleccionado = null;
     document.getElementById('btn-siguiente-paso3').disabled = true;
 
-    // Mostrar spinner
     slotsContainer.innerHTML = '<div class="spinner"></div> Buscando horarios...';
 
-    // Timeout de seguridad (12 segundos) - SOLUCIÓN BUG #3 con bandera
     const timeoutId = setTimeout(() => {
         if (cargandoHorarios) {
             slotsContainer.innerHTML = `
                 <p style="color: #b91c1c;">No se pudieron cargar los horarios. 
                 <button id="retry-horarios" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
-            document.getElementById('retry-horarios')?.addEventListener('click', () => {
-                cargarHorariosDisponibles(fechaStr);
-            });
+            document.getElementById('retry-horarios')?.addEventListener('click', () => cargarHorariosDisponibles(fechaStr));
             cargandoHorarios = false;
         }
     }, 12000);
@@ -215,10 +193,9 @@ async function cargarHorariosDisponibles(fechaStr) {
             clearTimeout(timeoutId);
             return;
         }
-        const duracion = servicioSeleccionado.duracion; // minutos
+        const duracion = servicioSeleccionado.duracion;
 
-        // Obtener jornada del día seleccionado (fecha local)
-        const fecha = new Date(fechaStr + 'T12:00:00'); // mediodía para evitar problemas de zona
+        const fecha = new Date(fechaStr + 'T12:00:00');
         const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
         const horarioNegocio = (datosNegocio.horario || {})[diaSem] || { abierto: true, inicio: '09:00', fin: '18:00' };
         if (!horarioNegocio.abierto) {
@@ -233,12 +210,8 @@ async function cargarHorariosDisponibles(fechaStr) {
         const inicioMinutos = hIni * 60 + mIni;
         const finMinutos = hFin * 60 + mFin;
 
-        // Rango de tiempo del día seleccionado (local)
         const inicioDia = new Date(fechaStr + 'T00:00:00');
         const finDia = new Date(fechaStr + 'T23:59:59');
-
-        // SOLUCIÓN BUG #1: usamos una consulta con filtro por fecha en Firestore
-        // para solo descargar las citas del día, no todas.
         const citasQuery = query(
             collection(db, 'negocios', negocioId, 'citas'),
             where('fechaHora', '>=', inicioDia),
@@ -246,6 +219,7 @@ async function cargarHorariosDisponibles(fechaStr) {
         );
         const citasSnap = await getDocs(citasQuery);
 
+        // ✅ CORRECCIÓN BUG PRINCIPAL: incluir empleadoId en cada cita ocupada
         const ocupados = [];
         citasSnap.forEach(citaDoc => {
             const c = citaDoc.data();
@@ -253,20 +227,56 @@ async function cargarHorariosDisponibles(fechaStr) {
             const fechaCita = c.fechaHora.toDate();
             ocupados.push({
                 inicio: fechaCita.getHours() * 60 + fechaCita.getMinutes(),
-                duracion: c.duracion || duracion
+                duracion: c.duracion || duracion,
+                empleadoId: c.empleadoId || null   // ← guardamos el empleado asignado
             });
         });
 
-        // Generar slots cada 30 min
+        // Obtener la lista de empleados activos (para "Cualquiera")
+        let empleadosActivosIds = [];
+        if (!empleadoSeleccionado) {
+            const empSnap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
+            empleadosActivosIds = empSnap.docs
+                .filter(d => d.data().disponible !== false)
+                .map(d => d.id);
+        }
+
         slotsContainer.innerHTML = '';
         let slotsGenerados = 0;
         for (let min = inicioMinutos; min < finMinutos; min += 30) {
             const slotFin = min + duracion;
             if (slotFin > finMinutos) break;
-            const choca = ocupados.some(cita => {
-                return (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
-            });
-            if (!choca) {
+
+            let slotDisponible = false;
+
+            if (empleadoSeleccionado) {
+                // CASO 1: Empleado específico → solo bloquean las citas de ese empleado (o sin empleado)
+                const choca = ocupados.some(cita => {
+                    const esMismoEmpleado = cita.empleadoId === empleadoSeleccionado.id || cita.empleadoId === null;
+                    return esMismoEmpleado && (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
+                });
+                slotDisponible = !choca;
+            } else {
+                // CASO 2: "Cualquiera" → al menos un empleado debe estar libre
+                if (empleadosActivosIds.length === 0) {
+                    // Sin empleados registrados → cualquier cita bloquea
+                    const choca = ocupados.some(cita => (min < cita.inicio + cita.duracion && slotFin > cita.inicio));
+                    slotDisponible = !choca;
+                } else {
+                    for (const empId of empleadosActivosIds) {
+                        const ocupadoEsteEmp = ocupados.some(cita => {
+                            const esMismoEmpleado = cita.empleadoId === empId || cita.empleadoId === null;
+                            return esMismoEmpleado && (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
+                        });
+                        if (!ocupadoEsteEmp) {
+                            slotDisponible = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (slotDisponible) {
                 const horas = Math.floor(min / 60);
                 const minutos = min % 60;
                 const horaStr = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
@@ -290,9 +300,7 @@ async function cargarHorariosDisponibles(fechaStr) {
         console.error('Error al cargar horarios:', error);
         slotsContainer.innerHTML = `<p style="color: #b91c1c;">Error al cargar horarios: ${error.message}. 
         <button id="retry-horarios" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
-        document.getElementById('retry-horarios')?.addEventListener('click', () => {
-            cargarHorariosDisponibles(fechaStr);
-        });
+        document.getElementById('retry-horarios')?.addEventListener('click', () => cargarHorariosDisponibles(fechaStr));
     } finally {
         cargandoHorarios = false;
         clearTimeout(timeoutId);
@@ -306,12 +314,11 @@ document.getElementById('btn-siguiente').addEventListener('click', () => {
     if (!miniCalendario) inicializarCalendario();
     else miniCalendario.render();
 });
-
 document.getElementById('btn-volver-paso1').addEventListener('click', () => mostrarPaso(0));
 document.getElementById('btn-siguiente-paso3').addEventListener('click', () => mostrarPaso(2));
 document.getElementById('btn-volver-paso2').addEventListener('click', () => mostrarPaso(1));
 
-// ==================== CONFIRMAR CITA ====================
+// ==================== CONFIRMAR CITA (CORREGIDO) ====================
 document.getElementById('form-cliente').addEventListener('submit', async (e) => {
     e.preventDefault();
     const nombre = document.getElementById('cliente-nombre').value.trim();
@@ -320,6 +327,7 @@ document.getElementById('form-cliente').addEventListener('submit', async (e) => 
 
     const fechaHora = new Date(`${fechaSeleccionada}T${horarioSeleccionado}:00`);
 
+    // ✅ CORRECCIÓN BUG SECUNDARIO: incluir duracion en citaData
     const citaData = {
         clienteNombre: nombre,
         clienteTelefono: telefono,
@@ -327,6 +335,7 @@ document.getElementById('form-cliente').addEventListener('submit', async (e) => 
         servicioId: servicioSeleccionado.id,
         servicioNombre: servicioSeleccionado.nombre,
         empleadoId: empleadoSeleccionado?.id || null,
+        duracion: servicioSeleccionado.duracion,  // ← guardamos la duración real del servicio
         fechaHora,
         color: servicioSeleccionado.color || '#667eea',
         estado: 'confirmada',

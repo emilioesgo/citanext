@@ -294,17 +294,52 @@ function abrirCitasDelDia(fecha) {
   const titulo = document.getElementById('fecha-seleccionada');
   const container = document.getElementById('lista-citas-dia');
   if (!modal || !container) return;
+
   titulo.textContent = `Citas del ${fecha.toLocaleDateString('es-MX', {dateStyle:'long'})}`;
   container.innerHTML = 'Cargando...';
   modal.classList.remove('hidden');
 
+  // ---- CONFIGURAR CIERRE DEL MODAL ----
+  const closeBtn = modal.querySelector('.close');
+  const cerrarModal = () => modal.classList.add('hidden');
+
+  // Botón X
+  if (closeBtn) {
+    closeBtn.replaceWith(closeBtn.cloneNode(true)); // elimina listeners anteriores
+    modal.querySelector('.close').addEventListener('click', cerrarModal);
+  }
+
+  // Clic fuera del contenido (fondo oscuro)
+  modal.onclick = (e) => {
+    if (e.target === modal) cerrarModal();
+  };
+
+  // Tecla Escape
+  const escapeHandler = (e) => {
+    if (e.key === 'Escape') {
+      cerrarModal();
+      document.removeEventListener('keydown', escapeHandler);
+    }
+  };
+  document.addEventListener('keydown', escapeHandler);
+
+  // Limpiar el listener de escape cuando se cierre manualmente
+  const observer = new MutationObserver(() => {
+    if (modal.classList.contains('hidden')) {
+      document.removeEventListener('keydown', escapeHandler);
+      observer.disconnect();
+    }
+  });
+  observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+
+  // ---- CARGAR CITAS ----
   getDocs(query(collection(db, 'negocios', uid, 'citas'), 
     where('fechaHora', '>=', new Date(fechaStr+'T00:00:00')),
     where('fechaHora', '<=', new Date(fechaStr+'T23:59:59'))
   )).then(snap => {
     container.innerHTML = '';
     if (snap.empty) {
-      container.innerHTML = '<p>No hay citas para este día.</p>';
+      container.innerHTML = '<p style="text-align:center; padding:20px;">No hay citas para este día.</p>';
       return;
     }
     snap.forEach(doc => {
@@ -347,10 +382,6 @@ function abrirCitasDelDia(fecha) {
     });
   });
 }
-
-document.querySelector('#modal-citas-dia .close').onclick = () => {
-  document.getElementById('modal-citas-dia').classList.add('hidden');
-};
 
 // ========== ENLACES ==========
 async function cargarEnlace() {

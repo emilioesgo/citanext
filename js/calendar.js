@@ -4,7 +4,7 @@ import { doc, getDoc, getDocs, collection, addDoc, updateDoc, deleteDoc, query, 
 
 let uid, calendario;
 let citaEditandoId = null;
-let horarioSeleccionado = null;      // ← guarda la hora del slot elegido (HH:MM)
+let horarioSeleccionado = null;      // guarda la hora del slot elegido (HH:MM)
 
 // Elementos del DOM (que sí existen desde el principio)
 const modal = document.getElementById('modal-cita');
@@ -14,7 +14,9 @@ const btnEliminar = document.getElementById('btn-eliminar-cita');
 const slotsContainer = document.getElementById('slots-cita');
 const slotSeleccionadoTexto = document.getElementById('slot-seleccionado-texto');
 
-// ===== CARGAR DATOS DEL NEGOCIO PARA LA BARRA SUPERIOR =====
+/* ---------------------------------------------------------------------
+   CARGAR DATOS DEL NEGOCIO PARA LA BARRA SUPERIOR
+   --------------------------------------------------------------------- */
 async function cargarDatosNegocio() {
   try {
     const docRef = doc(db, 'negocios', uid);
@@ -39,7 +41,9 @@ async function cargarDatosNegocio() {
   }
 }
 
-// === AUTENTICACIÓN ===
+/* ---------------------------------------------------------------------
+   AUTENTICACIÓN
+   --------------------------------------------------------------------- */
 onAuthStateChanged(auth, async (user) => {
   if (!user) { window.location.href = 'auth.html'; return; }
   uid = user.uid;
@@ -54,7 +58,9 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
   window.location.href = 'auth.html';
 });
 
-// === CERRAR MODAL ===
+/* ---------------------------------------------------------------------
+   CERRAR MODAL
+   --------------------------------------------------------------------- */
 document.querySelector('.close').addEventListener('click', () => {
   modal.classList.add('hidden');
   resetFormulario();
@@ -76,7 +82,9 @@ function resetFormulario() {
   horarioSeleccionado = null;
 }
 
-// === CARGAR SERVICIOS Y EMPLEADOS EN LOS SELECT ===
+/* ---------------------------------------------------------------------
+   CARGAR SERVICIOS Y EMPLEADOS EN LOS SELECT
+   --------------------------------------------------------------------- */
 async function cargarServiciosEnSelect() {
   const select = document.getElementById('cita-servicio');
   select.innerHTML = '<option value="">Selecciona un servicio</option>';
@@ -96,9 +104,9 @@ async function cargarEmpleadosEnSelect() {
   });
 }
 
-// ======================================================================
-// INICIALIZAR CALENDARIO (paginación automática)
-// ======================================================================
+/* ---------------------------------------------------------------------
+   INICIALIZAR CALENDARIO (PAGINACIÓN AUTOMÁTICA)
+   --------------------------------------------------------------------- */
 function inicializarCalendario() {
   const calendarEl = document.getElementById('calendar');
   if (!calendarEl) return;
@@ -129,6 +137,9 @@ function inicializarCalendario() {
         fechaInput.value = info.dateStr;
         cargarSlotsDisponibles(info.dateStr);
         modal.classList.remove('hidden');
+      } else {
+        console.warn('No se encontró el input de fecha (cita-fecha-input).');
+        alert('Error interno: falta el campo de fecha. Contacta con soporte.');
       }
     },
     eventClick: (info) => abrirEdicionCita(info.event)
@@ -136,7 +147,7 @@ function inicializarCalendario() {
 
   calendario.render();
 
-  // Recalcular slots cuando cambie el servicio o empleado
+  // Listeners para recalcular slots al cambiar servicio, empleado o fecha
   document.getElementById('cita-servicio').addEventListener('change', () => {
     const fechaInput = document.getElementById('cita-fecha-input');
     if (fechaInput && fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
@@ -145,9 +156,17 @@ function inicializarCalendario() {
     const fechaInput = document.getElementById('cita-fecha-input');
     if (fechaInput && fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
   });
+  const fechaInput = document.getElementById('cita-fecha-input');
+  if (fechaInput) {
+    fechaInput.addEventListener('change', () => {
+      if (fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
+    });
+  }
 }
 
-// Carga eventos del rango visible
+/* ---------------------------------------------------------------------
+   CARGAR EVENTOS DEL RANGO VISIBLE
+   --------------------------------------------------------------------- */
 async function cargarEventosEnRango(start, end) {
   const citasQuery = query(
     collection(db, 'negocios', uid, 'citas'),
@@ -178,10 +197,9 @@ async function cargarEventosEnRango(start, end) {
   return eventos;
 }
 
-// ======================================================================
-// Cargar slots horarios disponibles para un día
-// FIX BUG 2: acepta horaPreselecta para preseleccionar sin setTimeout
-// ======================================================================
+/* ---------------------------------------------------------------------
+   CARGAR SLOTS HORARIOS DISPONIBLES
+   --------------------------------------------------------------------- */
 async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
   slotsContainer.innerHTML = '<div class="spinner"></div> Buscando horarios…';
   slotSeleccionadoTexto.style.display = 'none';
@@ -193,12 +211,10 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
     return;
   }
 
-  // Obtener duración del servicio
   const servicioSnap = await getDoc(doc(db, 'negocios', uid, 'servicios', servicioId));
   const servicioData = servicioSnap.data();
   const duracion = servicioData ? (servicioData.duracion || 30) : 30;
 
-  // Obtener horario del negocio para ese día
   const fecha = new Date(fechaStr + 'T12:00:00');
   const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
   const negocioSnap = await getDoc(doc(db, 'negocios', uid));
@@ -214,7 +230,6 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
   const inicioMinutos = hIni * 60 + mIni;
   const finMinutos = hFin * 60 + mFin;
 
-  // Obtener citas del día
   const inicioDia = new Date(fechaStr + 'T00:00:00');
   const finDia = new Date(fechaStr + 'T23:59:59');
   const citasQuery = query(
@@ -226,7 +241,6 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
 
   const empleadoIdSeleccionado = document.getElementById('cita-empleado').value || null;
 
-  // Construir array de ocupados con empleadoId
   const ocupados = [];
   citasSnap.forEach(doc => {
     const c = doc.data();
@@ -240,7 +254,6 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
     });
   });
 
-  // Empleados activos (para el caso "Cualquiera")
   let empleadosActivosIds = [];
   if (!empleadoIdSeleccionado) {
     const empSnap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
@@ -251,15 +264,11 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
 
   slotsContainer.innerHTML = '';
   let slotsGenerados = 0;
-
-  // FIX BUG 3: el incremento usa la duración del servicio en lugar de 30 fijo,
-  // así los slots no se solapan entre sí.
   for (let min = inicioMinutos; min < finMinutos; min += duracion) {
     const slotFin = min + duracion;
     if (slotFin > finMinutos) break;
 
     let disponible = false;
-
     if (empleadoIdSeleccionado) {
       const choca = ocupados.some(o =>
         (o.empleadoId === empleadoIdSeleccionado || o.empleadoId === null) &&
@@ -294,8 +303,6 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
       slot.className = 'slot';
       slot.textContent = horaStr;
 
-      // FIX BUG 2: preseleccionar el slot de la cita original si coincide,
-      // eliminando la necesidad del setTimeout en abrirEdicionCita.
       if (horaPreselecta && horaStr === horaPreselecta) {
         slot.classList.add('seleccionado');
         horarioSeleccionado = horaStr;
@@ -320,7 +327,9 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
   }
 }
 
-// === ABRIR MODAL PARA EDITAR ===
+/* ---------------------------------------------------------------------
+   ABRIR MODAL PARA EDITAR
+   --------------------------------------------------------------------- */
 async function abrirEdicionCita(event) {
   const props = event.extendedProps;
   citaEditandoId = event.id;
@@ -339,13 +348,7 @@ async function abrirEdicionCita(event) {
     fechaInput.value = localFecha.toISOString().slice(0, 10);
   }
 
-  // Obtener la hora original para preseleccionarla
   const horaOriginal = localFecha.toTimeString().slice(0, 5);
-
-  // FIX BUG 2: pasar horaOriginal a cargarSlotsDisponibles para que la preseleccione
-  // al terminar de renderizar, sin depender de un setTimeout frágil.
-  // horarioSeleccionado se establece dentro de cargarSlotsDisponibles si el slot existe,
-  // o aquí como respaldo por si el horario original ya no está disponible.
   horarioSeleccionado = horaOriginal;
   if (fechaInput) await cargarSlotsDisponibles(fechaInput.value, horaOriginal);
 
@@ -353,14 +356,9 @@ async function abrirEdicionCita(event) {
   modal.classList.remove('hidden');
 }
 
-// ======================================================================
-// VALIDADOR DE COLISIONES
-// FIX BUG 1: lógica de empleado ahora es simétrica y consistente con
-// cargarSlotsDisponibles. Una cita con empleadoId=null ("cualquier empleado")
-// puede chocar con cualquier empleado específico y viceversa.
-// Solo se omite la verificación cuando ambas citas tienen empleados
-// específicos y distintos entre sí.
-// ======================================================================
+/* ---------------------------------------------------------------------
+   VALIDADOR DE COLISIONES
+   --------------------------------------------------------------------- */
 async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIgnorarId = null) {
   const inicioNuevo = fechaInicio.getTime();
   const finNuevo = inicioNuevo + duracion * 60000;
@@ -377,7 +375,6 @@ async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIg
   );
   const snapshot = await getDocs(citasQuery);
 
-  // Construir lista de empleadoIds que tienen citas conflictivas en ese rango horario
   const empleadosOcupados = [];
   for (const citaDoc of snapshot.docs) {
     const cita = citaDoc.data();
@@ -396,39 +393,29 @@ async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIg
   const nuevoEmpleadoId = empleadoId || null;
 
   if (nuevoEmpleadoId) {
-    // Empleado específico: bloqueado si su propio id está ocupado O si hay
-    // una cita de "cualquier empleado" (null) en ese horario, ya que esa
-    // cita pudo haber consumido este empleado.
     const bloqueado = empleadosOcupados.some(
       empId => empId === nuevoEmpleadoId || empId === null
     );
     return !bloqueado;
   } else {
-    // "Cualquier empleado": verificar si hay al menos un empleado activo libre,
-    // usando la misma lógica que cargarSlotsDisponibles.
     const empSnap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
     const empleadosActivos = empSnap.docs
       .filter(d => d.data().disponible !== false)
       .map(d => d.id);
 
     if (empleadosActivos.length === 0) {
-      // Sin empleados configurados: libre si no hay ninguna cita conflictiva
       return empleadosOcupados.length === 0;
     }
 
-    // Hay al menos un empleado activo que no aparece en la lista de ocupados
-    // (ni él directamente ni via una cita de "cualquier empleado")
     return empleadosActivos.some(empId =>
-      !empleadosOcupados.some(
-        ocupadoId => ocupadoId === empId || ocupadoId === null
-      )
+      !empleadosOcupados.some(ocupadoId => ocupadoId === empId || ocupadoId === null)
     );
   }
 }
 
-// ======================================================================
-// GUARDAR CITA (CREAR O EDITAR)
-// ======================================================================
+/* ---------------------------------------------------------------------
+   GUARDAR CITA (CREAR O EDITAR)
+   --------------------------------------------------------------------- */
 formCita.addEventListener('submit', async (e) => {
   e.preventDefault();
   const clienteNombre = document.getElementById('cita-cliente').value;
@@ -488,6 +475,10 @@ formCita.addEventListener('submit', async (e) => {
         evento.setStart(citaData.fechaHora);
         evento.setExtendedProp('empleadoId', empleadoId || null);
         evento.setExtendedProp('duracion', duracion);
+        // CORRECCIÓN: actualizar color en vivo
+        evento.setProp('backgroundColor', color);
+        evento.setProp('borderColor', color);
+        evento.setExtendedProp('color', color);
       }
     } else {
       const docRef = await addDoc(collection(db, 'negocios', uid, 'citas'), citaData);
@@ -515,9 +506,9 @@ formCita.addEventListener('submit', async (e) => {
   }
 });
 
-// ======================================================================
-// ELIMINAR CITA
-// ======================================================================
+/* ---------------------------------------------------------------------
+   ELIMINAR CITA
+   --------------------------------------------------------------------- */
 btnEliminar.addEventListener('click', async () => {
   if (!citaEditandoId) return;
   if (confirm('¿Eliminar esta cita?')) {

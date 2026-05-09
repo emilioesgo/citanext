@@ -26,7 +26,6 @@
   <!-- Barra superior con logo y nombre dinámicos -->
   <nav class="topbar">
     <div class="nav-logo" id="nav-logo">
-      <!-- El logo y el nombre se rellenan desde calendar.js -->
       <img id="topbar-logo" src="" alt="Logo" class="topbar-logo-img">
       <span id="topbar-nombre">Citanext</span>
     </div>
@@ -40,7 +39,7 @@
     <div id="calendar"></div>
   </div>
 
-  <!-- Modal para crear/editar cita -->
+  <!-- Modal para crear/editar cita (CORREGIDO) -->
   <div id="modal-cita" class="modal hidden">
     <div class="modal-content">
       <span class="close">&times;</span>
@@ -66,10 +65,17 @@
           <label>Empleado (opcional)</label>
           <select id="cita-empleado"></select>
         </div>
+        <!-- ====== NUEVO: Selector de fecha y slots horarios ====== -->
         <div class="input-group">
-          <label>Fecha y hora</label>
-          <input type="datetime-local" id="cita-fecha" required>
+          <label>Fecha</label>
+          <input type="date" id="cita-fecha-input" required>
         </div>
+        <div class="input-group">
+          <label>Horario disponible</label>
+          <div id="slots-cita" class="slots">– Primero selecciona una fecha –</div>
+          <span id="slot-seleccionado-texto" style="font-size:0.85rem; color:#4f46e5; display:none;"></span>
+        </div>
+        <!-- ====== FIN NUEVO ====== -->
         <button type="submit" class="btn-primary">Guardar cita</button>
         <button type="button" id="btn-eliminar-cita" class="btn-danger hidden">Eliminar cita</button>
       </form>

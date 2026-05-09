@@ -6,14 +6,13 @@ let uid, calendario;
 let citaEditandoId = null;
 let horarioSeleccionado = null;      // ← guarda la hora del slot elegido (HH:MM)
 
-// Elementos del DOM
+// Elementos del DOM (que sí existen desde el principio)
 const modal = document.getElementById('modal-cita');
 const formCita = document.getElementById('form-cita');
 const modalTitulo = document.getElementById('modal-titulo');
 const btnEliminar = document.getElementById('btn-eliminar-cita');
 const slotsContainer = document.getElementById('slots-cita');
 const slotSeleccionadoTexto = document.getElementById('slot-seleccionado-texto');
-const fechaInput = document.getElementById('cita-fecha-input');
 
 // ===== CARGAR DATOS DEL NEGOCIO PARA LA BARRA SUPERIOR =====
 async function cargarDatosNegocio() {
@@ -125,11 +124,12 @@ function inicializarCalendario() {
       }
     },
     dateClick: (info) => {
-      // Asignar la fecha seleccionada en el input
-      fechaInput.value = info.dateStr;
-      // Cargar los slots para esa fecha
-      cargarSlotsDisponibles(info.dateStr);
-      modal.classList.remove('hidden');
+      const fechaInput = document.getElementById('cita-fecha-input'); // Obtener cada vez
+      if (fechaInput) {
+        fechaInput.value = info.dateStr;
+        cargarSlotsDisponibles(info.dateStr);
+        modal.classList.remove('hidden');
+      }
     },
     eventClick: (info) => abrirEdicionCita(info.event)
   });
@@ -138,10 +138,12 @@ function inicializarCalendario() {
 
   // Recalcular slots cuando cambie el servicio o empleado
   document.getElementById('cita-servicio').addEventListener('change', () => {
-    if (fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
+    const fechaInput = document.getElementById('cita-fecha-input');
+    if (fechaInput && fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
   });
   document.getElementById('cita-empleado').addEventListener('change', () => {
-    if (fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
+    const fechaInput = document.getElementById('cita-fecha-input');
+    if (fechaInput && fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
   });
 }
 
@@ -211,7 +213,7 @@ async function cargarSlotsDisponibles(fechaStr) {
   const inicioMinutos = hIni * 60 + mIni;
   const finMinutos = hFin * 60 + mFin;
 
-  // Obtener citas del día (solo las necesarias)
+  // Obtener citas del día
   const inicioDia = new Date(fechaStr + 'T00:00:00');
   const finDia = new Date(fechaStr + 'T23:59:59');
   const citasQuery = query(
@@ -228,7 +230,7 @@ async function cargarSlotsDisponibles(fechaStr) {
   citasSnap.forEach(doc => {
     const c = doc.data();
     if (c.estado === 'cancelada') return;
-    if (doc.id === citaEditandoId) return; // ignorar la cita que se edita
+    if (doc.id === citaEditandoId) return;
     const inicio = c.fechaHora.toDate();
     ocupados.push({
       inicio: inicio.getHours() * 60 + inicio.getMinutes(),
@@ -290,7 +292,7 @@ async function cargarSlotsDisponibles(fechaStr) {
       slot.addEventListener('click', () => {
         document.querySelectorAll('#slots-cita .slot').forEach(s => s.classList.remove('seleccionado'));
         slot.classList.add('seleccionado');
-        horarioSeleccionado = horaStr;            // ← guardamos la hora
+        horarioSeleccionado = horaStr;
         slotSeleccionadoTexto.textContent = `Has elegido las ${horaStr}`;
         slotSeleccionadoTexto.style.display = 'block';
       });
@@ -318,15 +320,17 @@ function abrirEdicionCita(event) {
   const fecha = event.start;
   const offset = fecha.getTimezoneOffset();
   const localFecha = new Date(fecha.getTime() - (offset * 60000));
-  fechaInput.value = localFecha.toISOString().slice(0, 10);
+  const fechaInput = document.getElementById('cita-fecha-input');
+  if (fechaInput) {
+    fechaInput.value = localFecha.toISOString().slice(0, 10);
+  }
 
   // Cargar slots para la fecha de la cita que se edita
-  cargarSlotsDisponibles(fechaInput.value);
+  if (fechaInput) cargarSlotsDisponibles(fechaInput.value);
 
   // Preseleccionar el slot de la cita original
   const horaOriginal = localFecha.toTimeString().slice(0, 5);
   horarioSeleccionado = horaOriginal;
-  // Se marcará una vez que los slots se hayan pintado (usamos un pequeño retardo)
   setTimeout(() => {
     document.querySelectorAll('#slots-cita .slot').forEach(s => {
       if (s.textContent === horaOriginal) {
@@ -342,7 +346,7 @@ function abrirEdicionCita(event) {
 }
 
 // ======================================================================
-// VALIDADOR DE COLISIONES (igual que antes)
+// VALIDADOR DE COLISIONES
 // ======================================================================
 async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIgnorarId = null) {
   const inicioNuevo = fechaInicio.getTime();
@@ -399,16 +403,20 @@ formCita.addEventListener('submit', async (e) => {
     return;
   }
 
+  const fechaInput = document.getElementById('cita-fecha-input');
+  if (!fechaInput || !fechaInput.value) {
+    alert('Selecciona una fecha.');
+    return;
+  }
+
   const servicioSnap = await getDoc(doc(db, 'negocios', uid, 'servicios', servicioId));
   const servicioData = servicioSnap.data();
   const servicioNombre = servicioData ? servicioData.nombre : '';
   const color = servicioData ? servicioData.color : '#667eea';
   const duracion = servicioData?.duracion || 30;
 
-  // Construir fecha completa combinando fecha del input + hora del slot
   const fechaHora = new Date(fechaInput.value + 'T' + horarioSeleccionado + ':00');
 
-  // Validar colisiones
   const disponible = await verificarDisponibilidad(fechaHora, duracion, empleadoId || null, citaEditandoId);
   if (!disponible) {
     alert('El empleado ya tiene una cita en ese horario. Elige otra hora o empleado.');

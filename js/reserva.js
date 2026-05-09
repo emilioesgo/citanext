@@ -325,6 +325,21 @@ document.getElementById('form-cliente').addEventListener('submit', async (e) => 
     const telefono = document.getElementById('cliente-telefono').value.trim();
     const email = document.getElementById('cliente-email').value.trim();
 
+    // Validación: nombre y teléfono son obligatorios
+    if (!nombre) {
+        alert('El nombre es obligatorio.');
+        return;
+    }
+    if (!telefono) {
+        alert('El teléfono es obligatorio.');
+        return;
+    }
+    // Validación: si se proporciona correo, debe ser válido
+    if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        alert('El correo no es válido.');
+        return;
+    }
+
     const fechaHora = new Date(`${fechaSeleccionada}T${horarioSeleccionado}:00`);
 
     // ✅ CORRECCIÓN BUG SECUNDARIO: incluir duracion en citaData

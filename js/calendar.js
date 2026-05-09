@@ -124,7 +124,7 @@ function inicializarCalendario() {
       }
     },
     dateClick: (info) => {
-      const fechaInput = document.getElementById('cita-fecha-input'); // Obtener cada vez
+      const fechaInput = document.getElementById('cita-fecha-input');
       if (fechaInput) {
         fechaInput.value = info.dateStr;
         cargarSlotsDisponibles(info.dateStr);
@@ -136,7 +136,7 @@ function inicializarCalendario() {
 
   calendario.render();
 
-  // Recalcular slots cuando cambie el servicio o empleado
+  // Listeners para recalcular slots al cambiar servicio, empleado o fecha
   document.getElementById('cita-servicio').addEventListener('change', () => {
     const fechaInput = document.getElementById('cita-fecha-input');
     if (fechaInput && fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
@@ -145,6 +145,13 @@ function inicializarCalendario() {
     const fechaInput = document.getElementById('cita-fecha-input');
     if (fechaInput && fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
   });
+  // CORRECCIÓN 3: evento change en el input de fecha
+  const fechaInput = document.getElementById('cita-fecha-input');
+  if (fechaInput) {
+    fechaInput.addEventListener('change', () => {
+      if (fechaInput.value) cargarSlotsDisponibles(fechaInput.value);
+    });
+  }
 }
 
 // Carga eventos del rango visible
@@ -179,9 +186,9 @@ async function cargarEventosEnRango(start, end) {
 }
 
 // ======================================================================
-// NUEVO: Cargar slots horarios disponibles para un día
+// Cargar slots horarios disponibles – CORRECCIÓN 2: horaPreseleccionada
 // ======================================================================
-async function cargarSlotsDisponibles(fechaStr) {
+async function cargarSlotsDisponibles(fechaStr, horaPreseleccionada = null) {
   slotsContainer.innerHTML = '<div class="spinner"></div> Buscando horarios…';
   slotSeleccionadoTexto.style.display = 'none';
   horarioSeleccionado = null;
@@ -192,12 +199,10 @@ async function cargarSlotsDisponibles(fechaStr) {
     return;
   }
 
-  // Obtener duración del servicio
   const servicioSnap = await getDoc(doc(db, 'negocios', uid, 'servicios', servicioId));
   const servicioData = servicioSnap.data();
   const duracion = servicioData ? (servicioData.duracion || 30) : 30;
 
-  // Obtener horario del negocio para ese día
   const fecha = new Date(fechaStr + 'T12:00:00');
   const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
   const negocioSnap = await getDoc(doc(db, 'negocios', uid));
@@ -213,7 +218,6 @@ async function cargarSlotsDisponibles(fechaStr) {
   const inicioMinutos = hIni * 60 + mIni;
   const finMinutos = hFin * 60 + mFin;
 
-  // Obtener citas del día
   const inicioDia = new Date(fechaStr + 'T00:00:00');
   const finDia = new Date(fechaStr + 'T23:59:59');
   const citasQuery = query(
@@ -225,7 +229,6 @@ async function cargarSlotsDisponibles(fechaStr) {
 
   const empleadoIdSeleccionado = document.getElementById('cita-empleado').value || null;
 
-  // Construir array de ocupados con empleadoId
   const ocupados = [];
   citasSnap.forEach(doc => {
     const c = doc.data();
@@ -239,7 +242,6 @@ async function cargarSlotsDisponibles(fechaStr) {
     });
   });
 
-  // Empleados activos (para el caso "Cualquiera")
   let empleadosActivosIds = [];
   if (!empleadoIdSeleccionado) {
     const empSnap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
@@ -296,6 +298,13 @@ async function cargarSlotsDisponibles(fechaStr) {
         slotSeleccionadoTexto.textContent = `Has elegido las ${horaStr}`;
         slotSeleccionadoTexto.style.display = 'block';
       });
+      // CORRECCIÓN 2: preseleccionar sincrónicamente si coincide con la hora original
+      if (horaPreseleccionada && horaStr === horaPreseleccionada) {
+        slot.classList.add('seleccionado');
+        horarioSeleccionado = horaStr;
+        slotSeleccionadoTexto.textContent = `Hora actual: ${horaStr}`;
+        slotSeleccionadoTexto.style.display = 'block';
+      }
       slotsContainer.appendChild(slot);
       slotsGenerados++;
     }
@@ -325,28 +334,17 @@ function abrirEdicionCita(event) {
     fechaInput.value = localFecha.toISOString().slice(0, 10);
   }
 
-  // Cargar slots para la fecha de la cita que se edita
-  if (fechaInput) cargarSlotsDisponibles(fechaInput.value);
-
-  // Preseleccionar el slot de la cita original
   const horaOriginal = localFecha.toTimeString().slice(0, 5);
+  // CORRECCIÓN 2: pasar la hora original a cargarSlotsDisponibles
+  if (fechaInput) cargarSlotsDisponibles(fechaInput.value, horaOriginal);
   horarioSeleccionado = horaOriginal;
-  setTimeout(() => {
-    document.querySelectorAll('#slots-cita .slot').forEach(s => {
-      if (s.textContent === horaOriginal) {
-        s.classList.add('seleccionado');
-        slotSeleccionadoTexto.textContent = `Hora actual: ${horaOriginal}`;
-        slotSeleccionadoTexto.style.display = 'block';
-      }
-    });
-  }, 200);
 
   btnEliminar.classList.remove('hidden');
   modal.classList.remove('hidden');
 }
 
 // ======================================================================
-// VALIDADOR DE COLISIONES
+// VALIDADOR DE COLISIONES – CORRECCIÓN 1: lógica para "Cualquier empleado"
 // ======================================================================
 async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIgnorarId = null) {
   const inicioNuevo = fechaInicio.getTime();
@@ -364,6 +362,29 @@ async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIg
   );
   const snapshot = await getDocs(citasQuery);
 
+  // CORRECCIÓN 1: si no se eligió empleado, contamos cuántos empleados distintos están ocupados en ese bloque
+  if (!empleadoId) {
+    // Obtener total de empleados activos
+    const empSnap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
+    const totalEmpleados = empSnap.docs.filter(d => d.data().disponible !== false).length || 1;
+
+    const empleadosOcupados = new Set();
+    for (const citaDoc of snapshot.docs) {
+      if (citaDoc.id === citaIgnorarId) continue;
+      const cita = citaDoc.data();
+      const inicioExistente = cita.fechaHora.toDate().getTime();
+      const duracionExistente = (cita.duracion || 30) * 60000;
+      const finExistente = new Date(inicioExistente + duracionExistente);
+      if (inicioNuevo < finExistente.getTime() && finNuevo.getTime() > inicioExistente) {
+        // Si la cita no tiene empleado, se considera que ocupa uno genérico
+        empleadosOcupados.add(cita.empleadoId || 'sin-asignar');
+      }
+    }
+    // Si todos los empleados están ocupados, no hay disponibilidad
+    return empleadosOcupados.size < totalEmpleados;
+  }
+
+  // Lógica original para empleado concreto
   for (const citaDoc of snapshot.docs) {
     const cita = citaDoc.data();
     if (citaDoc.id === citaIgnorarId) continue;
@@ -384,7 +405,7 @@ async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIg
 }
 
 // ======================================================================
-// GUARDAR CITA (CREAR O EDITAR)
+// GUARDAR CITA (CREAR O EDITAR) – CORRECCIÓN 4: actualizar color en vivo
 // ======================================================================
 formCita.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -445,6 +466,10 @@ formCita.addEventListener('submit', async (e) => {
         evento.setStart(citaData.fechaHora);
         evento.setExtendedProp('empleadoId', empleadoId || null);
         evento.setExtendedProp('duracion', duracion);
+        // CORRECCIÓN 4: actualizar color en vivo
+        evento.setProp('backgroundColor', color);
+        evento.setProp('borderColor', color);
+        evento.setExtendedProp('color', color);
       }
     } else {
       const docRef = await addDoc(collection(db, 'negocios', uid, 'citas'), citaData);

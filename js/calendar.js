@@ -475,7 +475,7 @@ formCita.addEventListener('submit', async (e) => {
         evento.setStart(citaData.fechaHora);
         evento.setExtendedProp('empleadoId', empleadoId || null);
         evento.setExtendedProp('duracion', duracion);
-        // CORRECCIÓN: actualizar color en vivo
+        // Actualizar color en vivo
         evento.setProp('backgroundColor', color);
         evento.setProp('borderColor', color);
         evento.setExtendedProp('color', color);

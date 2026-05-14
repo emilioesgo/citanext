@@ -68,7 +68,26 @@
     </div>
   </div>
 
-  <script type="module" src="js/auth.js"></script>
+  <script>
+    (() => {
+      const params = new URLSearchParams(window.location.search);
+      const quiereLogin = params.get('mode') === 'login' || window.location.hash === '#login';
+      if (!quiereLogin) return;
+
+      const mostrarLoginInicial = () => {
+        document.getElementById('register-form')?.classList.add('hidden');
+        document.getElementById('login-form')?.classList.remove('hidden');
+        document.getElementById('auth-message')?.classList.add('hidden');
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', mostrarLoginInicial, { once: true });
+      } else {
+        mostrarLoginInicial();
+      }
+    })();
+  </script>
+  <script type="module" src="js/auth.js?v=3"></script>
 
   <!-- ====== REGISTRO DEL SERVICE WORKER ====== -->
   <script>

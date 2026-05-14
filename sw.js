@@ -1,4 +1,4 @@
-const CACHE_NAME = 'citanext-v2';
+const CACHE_NAME = 'citanext-v3';
 
 // Archivos que estarán disponibles offline
 const urlsToCache = [

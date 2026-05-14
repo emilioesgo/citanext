@@ -12,20 +12,33 @@ const authMessage = document.getElementById('auth-message');
 const showLoginLink = document.getElementById('show-login');
 const showRegisterLink = document.getElementById('show-register');
 
-// Alternar formularios
-showLoginLink.addEventListener('click', (e) => {
-  e.preventDefault();
+function mostrarLogin() {
   registerForm.classList.add('hidden');
   loginForm.classList.remove('hidden');
   authMessage.classList.add('hidden');
+}
+
+function mostrarRegistro() {
+  loginForm.classList.add('hidden');
+  registerForm.classList.remove('hidden');
+  authMessage.classList.add('hidden');
+}
+
+// Alternar formularios
+showLoginLink.addEventListener('click', (e) => {
+  e.preventDefault();
+  mostrarLogin();
 });
 
 showRegisterLink.addEventListener('click', (e) => {
   e.preventDefault();
-  loginForm.classList.add('hidden');
-  registerForm.classList.remove('hidden');
-  authMessage.classList.add('hidden');
+  mostrarRegistro();
 });
+
+const params = new URLSearchParams(window.location.search);
+if (params.get('mode') === 'login' || window.location.hash === '#login') {
+  mostrarLogin();
+}
 
 function mostrarMensaje(texto, tipo) {
   authMessage.textContent = texto;

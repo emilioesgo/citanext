@@ -474,7 +474,7 @@
     <nav class="navbar">
         <div class="nav-logo">📅 Citanext</div>
         <div class="nav-buttons">
-            <a href="auth.html" class="btn-nav btn-login">Iniciar Sesión</a>
+            <a href="auth.html?mode=login" class="btn-nav btn-login">Iniciar Sesión</a>
             <a href="auth.html" class="btn-nav btn-register">Registrarse Gratis</a>
         </div>
     </nav>
@@ -747,7 +747,7 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/citanext/sw.js')
+                navigator.serviceWorker.register('sw.js')
                     .then((registration) => console.log('SW registrado:', registration.scope))
                     .catch((error) => console.log('Error al registrar SW:', error));
             });

@@ -1,5 +1,5 @@
 import { db } from './firebase-config.js';
-import { doc, getDoc, getDocs, collection, addDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, getDocs, collection, query, where, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const urlParams = new URLSearchParams(window.location.search);
 const identificador = urlParams.get('negocio'); // UID o slug
@@ -74,8 +74,16 @@ async function cargarServicios() {
             card.className = 'servicio-card';
             card.dataset.id = doc.id;
             card.dataset.duracion = s.duracion;
-            card.innerHTML = `<div class="nombre">${s.nombre}</div>
-                              <div class="detalles">${s.duracion} min · $${s.precio}</div>`;
+
+            const nombre = document.createElement('div');
+            nombre.className = 'nombre';
+            nombre.textContent = s.nombre || 'Servicio';
+
+            const detalles = document.createElement('div');
+            detalles.className = 'detalles';
+            detalles.textContent = `${s.duracion || 30} min · $${s.precio || 0}`;
+
+            card.append(nombre, detalles);
             card.addEventListener('click', () => {
                 document.querySelectorAll('.servicio-card').forEach(c => c.classList.remove('seleccionado'));
                 card.classList.add('seleccionado');
@@ -88,6 +96,112 @@ async function cargarServicios() {
         console.error('Error al cargar servicios:', error);
         container.innerHTML = '<p>Error al cargar servicios.</p>';
     }
+}
+
+function crearIdBloqueo(fechaHora, offsetMinutos, empleadoId) {
+    const fecha = new Date(fechaHora.getTime() + offsetMinutos * 60000);
+    const pad = (valor) => String(valor).padStart(2, '0');
+    const fechaId = [
+        fecha.getFullYear(),
+        pad(fecha.getMonth() + 1),
+        pad(fecha.getDate())
+    ].join('');
+    const horaId = `${pad(fecha.getHours())}${pad(fecha.getMinutes())}`;
+    return `${fechaId}-${horaId}-${empleadoId || 'negocio'}`;
+}
+
+function obtenerRefsBloqueo(fechaHora, duracion, empleadoId) {
+    const refs = [];
+    for (let offset = 0; offset < duracion; offset += 30) {
+        refs.push(doc(db, 'negocios', negocioId, 'bloqueosCitas', crearIdBloqueo(fechaHora, offset, empleadoId)));
+    }
+    return refs;
+}
+
+async function obtenerEmpleadosCandidatos() {
+    if (empleadoSeleccionado?.id) return [empleadoSeleccionado.id];
+
+    const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
+    const empleadosActivos = snap.docs
+        .filter(d => d.data().disponible !== false)
+        .map(d => d.id);
+
+    return empleadosActivos.length ? empleadosActivos : [null];
+}
+
+async function empleadoDisponibleEnCitas(fechaHora, duracion, empleadoId) {
+    const inicioNuevo = fechaHora.getTime();
+    const finNuevo = inicioNuevo + duracion * 60000;
+    const inicioDia = new Date(fechaHora);
+    inicioDia.setHours(0, 0, 0, 0);
+    const finDia = new Date(fechaHora);
+    finDia.setHours(23, 59, 59, 999);
+
+    const citasQuery = query(
+        collection(db, 'negocios', negocioId, 'citas'),
+        where('fechaHora', '>=', inicioDia),
+        where('fechaHora', '<=', finDia)
+    );
+    const snap = await getDocs(citasQuery);
+
+    return !snap.docs.some(citaDoc => {
+        const cita = citaDoc.data();
+        if (cita.estado === 'cancelada') return false;
+
+        const inicioExistente = cita.fechaHora.toDate().getTime();
+        const finExistente = inicioExistente + (cita.duracion || 30) * 60000;
+        const hayChoque = inicioNuevo < finExistente && finNuevo > inicioExistente;
+        if (!hayChoque) return false;
+
+        const empleadoExistente = cita.empleadoId || null;
+        if (!empleadoId) return true;
+        return empleadoExistente === empleadoId || empleadoExistente === null;
+    });
+}
+
+async function guardarCitaConBloqueo(citaData) {
+    const candidatos = await obtenerEmpleadosCandidatos();
+    const duracion = citaData.duracion || 30;
+
+    for (const empleadoId of candidatos) {
+        const sigueDisponible = await empleadoDisponibleEnCitas(citaData.fechaHora, duracion, empleadoId);
+        if (!sigueDisponible) continue;
+
+        try {
+            const citaGuardada = await runTransaction(db, async (transaction) => {
+                const bloqueoRefs = obtenerRefsBloqueo(citaData.fechaHora, duracion, empleadoId);
+                for (const bloqueoRef of bloqueoRefs) {
+                    const bloqueoSnap = await transaction.get(bloqueoRef);
+                    if (bloqueoSnap.exists()) {
+                        const error = new Error('slot-ocupado');
+                        error.code = 'slot-ocupado';
+                        throw error;
+                    }
+                }
+
+                const citaRef = doc(collection(db, 'negocios', negocioId, 'citas'));
+                const datosFinales = { ...citaData, empleadoId: empleadoId || null };
+                transaction.set(citaRef, datosFinales);
+                bloqueoRefs.forEach((bloqueoRef) => {
+                    transaction.set(bloqueoRef, {
+                        citaId: citaRef.id,
+                        empleadoId: empleadoId || null,
+                        fechaHora: citaData.fechaHora,
+                        duracion,
+                        createdAt: new Date()
+                    });
+                });
+                return { id: citaRef.id, ...datosFinales };
+            });
+
+            return citaGuardada;
+        } catch (error) {
+            if (error.code === 'slot-ocupado') continue;
+            throw error;
+        }
+    }
+
+    throw new Error('Ese horario acaba de ocuparse. Elige otro horario disponible.');
 }
 
 // ==================== EMPLEADOS ====================
@@ -358,7 +472,7 @@ document.getElementById('form-cliente').addEventListener('submit', async (e) => 
     };
 
     try {
-        await addDoc(collection(db, 'negocios', negocioId, 'citas'), citaData);
+        await guardarCitaConBloqueo(citaData);
         const resumen = `${servicioSeleccionado.nombre} el ${fechaSeleccionada} a las ${horarioSeleccionado}`;
         document.getElementById('resumen-cita').textContent = resumen;
         mostrarPaso(3);

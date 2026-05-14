@@ -91,7 +91,10 @@ async function cargarServiciosEnSelect() {
   const snap = await getDocs(collection(db, 'negocios', uid, 'servicios'));
   snap.forEach(doc => {
     const s = doc.data();
-    select.innerHTML += `<option value="${doc.id}">${s.nombre} (${s.duracion} min)</option>`;
+    const option = document.createElement('option');
+    option.value = doc.id;
+    option.textContent = `${s.nombre || 'Servicio'} (${s.duracion || 30} min)`;
+    select.appendChild(option);
   });
 }
 
@@ -100,7 +103,10 @@ async function cargarEmpleadosEnSelect() {
   select.innerHTML = '<option value="">Cualquier empleado</option>';
   const snap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
   snap.forEach(doc => {
-    select.innerHTML += `<option value="${doc.id}">${doc.data().nombre}</option>`;
+    const option = document.createElement('option');
+    option.value = doc.id;
+    option.textContent = doc.data().nombre || 'Empleado';
+    select.appendChild(option);
   });
 }
 
@@ -360,6 +366,10 @@ async function abrirEdicionCita(event) {
    VALIDADOR DE COLISIONES
    --------------------------------------------------------------------- */
 async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIgnorarId = null) {
+  return (await obtenerEmpleadoDisponible(fechaInicio, duracion, empleadoId, citaIgnorarId)) !== undefined;
+}
+
+async function obtenerEmpleadoDisponible(fechaInicio, duracion, empleadoId, citaIgnorarId = null) {
   const inicioNuevo = fechaInicio.getTime();
   const finNuevo = inicioNuevo + duracion * 60000;
 
@@ -396,21 +406,21 @@ async function verificarDisponibilidad(fechaInicio, duracion, empleadoId, citaIg
     const bloqueado = empleadosOcupados.some(
       empId => empId === nuevoEmpleadoId || empId === null
     );
-    return !bloqueado;
-  } else {
-    const empSnap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
-    const empleadosActivos = empSnap.docs
-      .filter(d => d.data().disponible !== false)
-      .map(d => d.id);
-
-    if (empleadosActivos.length === 0) {
-      return empleadosOcupados.length === 0;
-    }
-
-    return empleadosActivos.some(empId =>
-      !empleadosOcupados.some(ocupadoId => ocupadoId === empId || ocupadoId === null)
-    );
+    return bloqueado ? undefined : nuevoEmpleadoId;
   }
+
+  const empSnap = await getDocs(collection(db, 'negocios', uid, 'empleados'));
+  const empleadosActivos = empSnap.docs
+    .filter(d => d.data().disponible !== false)
+    .map(d => d.id);
+
+  if (empleadosActivos.length === 0) {
+    return empleadosOcupados.length === 0 ? null : undefined;
+  }
+
+  return empleadosActivos.find(empId =>
+    !empleadosOcupados.some(ocupadoId => ocupadoId === empId || ocupadoId === null)
+  );
 }
 
 /* ---------------------------------------------------------------------
@@ -447,9 +457,9 @@ formCita.addEventListener('submit', async (e) => {
 
   const fechaHora = new Date(fechaInput.value + 'T' + horarioSeleccionado + ':00');
 
-  const disponible = await verificarDisponibilidad(fechaHora, duracion, empleadoId || null, citaEditandoId);
-  if (!disponible) {
-    alert('El empleado ya tiene una cita en ese horario. Elige otra hora o empleado.');
+  const empleadoAsignado = await obtenerEmpleadoDisponible(fechaHora, duracion, empleadoId || null, citaEditandoId);
+  if (empleadoAsignado === undefined) {
+    alert('No hay empleados disponibles en ese horario. Elige otra hora o empleado.');
     return;
   }
 
@@ -459,7 +469,7 @@ formCita.addEventListener('submit', async (e) => {
     clienteEmail,
     servicioId,
     servicioNombre,
-    empleadoId: empleadoId || null,
+    empleadoId: empleadoAsignado,
     fechaHora,
     duracion,
     color,
@@ -473,7 +483,7 @@ formCita.addEventListener('submit', async (e) => {
       if (evento) {
         evento.setProp('title', `${clienteNombre} - ${servicioNombre}`);
         evento.setStart(citaData.fechaHora);
-        evento.setExtendedProp('empleadoId', empleadoId || null);
+        evento.setExtendedProp('empleadoId', empleadoAsignado);
         evento.setExtendedProp('duracion', duracion);
         // Actualizar color en vivo
         evento.setProp('backgroundColor', color);
@@ -493,7 +503,7 @@ formCita.addEventListener('submit', async (e) => {
           clienteTelefono,
           clienteEmail,
           servicioId,
-          empleadoId: empleadoId || null,
+          empleadoId: empleadoAsignado,
           duracion,
           color
         }

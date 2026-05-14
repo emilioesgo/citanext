@@ -694,9 +694,10 @@ async function cargarEnlace() {
 }
 
 function actualizarEnlaceMostrado(slug) {
-  const base = window.location.origin + '/citanext/reserva.html?negocio=';
   const identificador = slug || uid;
-  const enlace = base + identificador;
+  const enlaceUrl = new URL('reserva.html', window.location.href);
+  enlaceUrl.searchParams.set('negocio', identificador);
+  const enlace = enlaceUrl.href;
   const enlaceInput = document.getElementById('enlace-publico');
   if (enlaceInput) enlaceInput.value = enlace;
   generarQR(enlace);

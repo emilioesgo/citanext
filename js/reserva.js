@@ -2,14 +2,13 @@ import { db } from './firebase-config.js';
 import { doc, getDoc, getDocs, collection, query, where, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const urlParams = new URLSearchParams(window.location.search);
-const identificador = urlParams.get('negocio'); // UID o slug
+const identificador = urlParams.get('negocio');
 
 if (!identificador) {
     alert('No se especificó un negocio. Contacta al administrador.');
     window.location.href = 'index.html';
 }
 
-// Variables globales
 let negocioId = null;
 let datosNegocio = {};
 let servicioSeleccionado = null;
@@ -22,7 +21,6 @@ let cargandoHorarios = false;
 const pasos = document.querySelectorAll('.paso');
 let pasoActual = 0;
 
-// Utilidad para cambiar de paso
 function mostrarPaso(indice) {
     pasos.forEach(p => p.classList.remove('activo'));
     pasos[indice].classList.add('activo');
@@ -68,11 +66,11 @@ async function cargarServicios() {
     container.innerHTML = '';
     try {
         const snap = await getDocs(collection(db, 'negocios', negocioId, 'servicios'));
-        snap.forEach(doc => {
-            const s = doc.data();
+        snap.forEach(docSnap => {
+            const s = docSnap.data();
             const card = document.createElement('div');
             card.className = 'servicio-card';
-            card.dataset.id = doc.id;
+            card.dataset.id = docSnap.id;
             card.dataset.duracion = s.duracion;
 
             const nombre = document.createElement('div');
@@ -87,7 +85,7 @@ async function cargarServicios() {
             card.addEventListener('click', () => {
                 document.querySelectorAll('.servicio-card').forEach(c => c.classList.remove('seleccionado'));
                 card.classList.add('seleccionado');
-                servicioSeleccionado = { id: doc.id, ...s };
+                servicioSeleccionado = { id: docSnap.id, ...s };
                 document.getElementById('btn-siguiente').disabled = false;
             });
             container.appendChild(card);
@@ -98,14 +96,11 @@ async function cargarServicios() {
     }
 }
 
+// ==================== HELPERS DE BLOQUEO ====================
 function crearIdBloqueo(fechaHora, offsetMinutos, empleadoId) {
     const fecha = new Date(fechaHora.getTime() + offsetMinutos * 60000);
     const pad = (valor) => String(valor).padStart(2, '0');
-    const fechaId = [
-        fecha.getFullYear(),
-        pad(fecha.getMonth() + 1),
-        pad(fecha.getDate())
-    ].join('');
+    const fechaId = [fecha.getFullYear(), pad(fecha.getMonth() + 1), pad(fecha.getDate())].join('');
     const horaId = `${pad(fecha.getHours())}${pad(fecha.getMinutes())}`;
     return `${fechaId}-${horaId}-${empleadoId || 'negocio'}`;
 }
@@ -113,19 +108,18 @@ function crearIdBloqueo(fechaHora, offsetMinutos, empleadoId) {
 function obtenerRefsBloqueo(fechaHora, duracion, empleadoId) {
     const refs = [];
     for (let offset = 0; offset < duracion; offset += 30) {
-        refs.push(doc(db, 'negocios', negocioId, 'bloqueosCitas', crearIdBloqueo(fechaHora, offset, empleadoId)));
+        refs.push(doc(db, 'negocios', negocioId, 'bloqueosCitas',
+            crearIdBloqueo(fechaHora, offset, empleadoId)));
     }
     return refs;
 }
 
 async function obtenerEmpleadosCandidatos() {
     if (empleadoSeleccionado?.id) return [empleadoSeleccionado.id];
-
     const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
     const empleadosActivos = snap.docs
         .filter(d => d.data().disponible !== false)
         .map(d => d.id);
-
     return empleadosActivos.length ? empleadosActivos : [null];
 }
 
@@ -137,22 +131,19 @@ async function empleadoDisponibleEnCitas(fechaHora, duracion, empleadoId) {
     const finDia = new Date(fechaHora);
     finDia.setHours(23, 59, 59, 999);
 
-    const citasQuery = query(
+    const snap = await getDocs(query(
         collection(db, 'negocios', negocioId, 'citas'),
         where('fechaHora', '>=', inicioDia),
         where('fechaHora', '<=', finDia)
-    );
-    const snap = await getDocs(citasQuery);
+    ));
 
     return !snap.docs.some(citaDoc => {
         const cita = citaDoc.data();
         if (cita.estado === 'cancelada') return false;
-
         const inicioExistente = cita.fechaHora.toDate().getTime();
         const finExistente = inicioExistente + (cita.duracion || 30) * 60000;
         const hayChoque = inicioNuevo < finExistente && finNuevo > inicioExistente;
         if (!hayChoque) return false;
-
         const empleadoExistente = cita.empleadoId || null;
         if (!empleadoId) return true;
         return empleadoExistente === empleadoId || empleadoExistente === null;
@@ -166,7 +157,6 @@ async function guardarCitaConBloqueo(citaData) {
     for (const empleadoId of candidatos) {
         const sigueDisponible = await empleadoDisponibleEnCitas(citaData.fechaHora, duracion, empleadoId);
         if (!sigueDisponible) continue;
-
         try {
             const citaGuardada = await runTransaction(db, async (transaction) => {
                 const bloqueoRefs = obtenerRefsBloqueo(citaData.fechaHora, duracion, empleadoId);
@@ -178,7 +168,6 @@ async function guardarCitaConBloqueo(citaData) {
                         throw error;
                     }
                 }
-
                 const citaRef = doc(collection(db, 'negocios', negocioId, 'citas'));
                 const datosFinales = { ...citaData, empleadoId: empleadoId || null };
                 transaction.set(citaRef, datosFinales);
@@ -193,14 +182,12 @@ async function guardarCitaConBloqueo(citaData) {
                 });
                 return { id: citaRef.id, ...datosFinales };
             });
-
             return citaGuardada;
         } catch (error) {
             if (error.code === 'slot-ocupado') continue;
             throw error;
         }
     }
-
     throw new Error('Ese horario acaba de ocuparse. Elige otro horario disponible.');
 }
 
@@ -217,18 +204,18 @@ async function cargarEmpleados() {
     };
     try {
         const snap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
-        snap.forEach(doc => {
-            const e = doc.data();
+        snap.forEach(docSnap => {
+            const e = docSnap.data();
             if (e.disponible === false) return;
             const card = document.createElement('div');
             card.className = 'empleado-card seleccionable';
-            card.dataset.id = doc.id;
+            card.dataset.id = docSnap.id;
             card.textContent = e.nombre;
             if (e.especialidad) card.title = e.especialidad;
             card.addEventListener('click', () => {
                 document.querySelectorAll('.empleado-card').forEach(c => c.classList.remove('seleccionado'));
                 card.classList.add('seleccionado');
-                empleadoSeleccionado = { id: doc.id, ...e };
+                empleadoSeleccionado = { id: docSnap.id, ...e };
             });
             container.appendChild(card);
         });
@@ -250,8 +237,7 @@ function inicializarCalendario() {
         dayCellDidMount: (info) => {
             const fechaLocal = new Date(info.dateStr + 'T12:00:00');
             const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fechaLocal.getDay()];
-            const horario = datosNegocio.horario || {};
-            const config = horario[diaSem] || { abierto: true };
+            const config = (datosNegocio.horario || {})[diaSem] || { abierto: true };
             if (!config.abierto) {
                 info.el.classList.add('dia-no-laborable');
                 info.el.style.pointerEvents = 'none';
@@ -266,7 +252,7 @@ function inicializarCalendario() {
                 return;
             }
             const hoy = new Date();
-            hoy.setHours(0,0,0,0);
+            hoy.setHours(0, 0, 0, 0);
             if (fechaLocal < hoy) {
                 alert('No puedes seleccionar una fecha pasada.');
                 return;
@@ -279,22 +265,20 @@ function inicializarCalendario() {
     miniCalendario.render();
 }
 
-// ==================== HORARIOS DISPONIBLES (CORREGIDO) ====================
+// ==================== HORARIOS DISPONIBLES ====================
 async function cargarHorariosDisponibles(fechaStr) {
     const slotsContainer = document.getElementById('slots-horarios');
-    
+
     if (cargandoHorarios) return;
     cargandoHorarios = true;
     horarioSeleccionado = null;
     document.getElementById('btn-siguiente-paso3').disabled = true;
-
     slotsContainer.innerHTML = '<div class="spinner"></div> Buscando horarios...';
 
     const timeoutId = setTimeout(() => {
         if (cargandoHorarios) {
-            slotsContainer.innerHTML = `
-                <p style="color: #b91c1c;">No se pudieron cargar los horarios. 
-                <button id="retry-horarios" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
+            slotsContainer.innerHTML = `<p style="color:#b91c1c;">No se pudieron cargar los horarios.
+            <button id="retry-horarios" style="color:#4f46e5;text-decoration:underline;background:none;border:none;cursor:pointer;">Reintentar</button></p>`;
             document.getElementById('retry-horarios')?.addEventListener('click', () => cargarHorariosDisponibles(fechaStr));
             cargandoHorarios = false;
         }
@@ -307,11 +291,12 @@ async function cargarHorariosDisponibles(fechaStr) {
             clearTimeout(timeoutId);
             return;
         }
-        const duracion = servicioSeleccionado.duracion;
 
+        const duracion = servicioSeleccionado.duracion;
         const fecha = new Date(fechaStr + 'T12:00:00');
         const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
         const horarioNegocio = (datosNegocio.horario || {})[diaSem] || { abierto: true, inicio: '09:00', fin: '18:00' };
+
         if (!horarioNegocio.abierto) {
             slotsContainer.innerHTML = 'No laboramos este día.';
             cargandoHorarios = false;
@@ -322,18 +307,21 @@ async function cargarHorariosDisponibles(fechaStr) {
         const [hIni, mIni] = horarioNegocio.inicio.split(':').map(Number);
         const [hFin, mFin] = horarioNegocio.fin.split(':').map(Number);
         const inicioMinutos = hIni * 60 + mIni;
-        const finMinutos = hFin * 60 + mFin;
+        const finMinutos   = hFin * 60 + mFin;
 
-        const inicioDia = new Date(fechaStr + 'T00:00:00');
-        const finDia = new Date(fechaStr + 'T23:59:59');
-        const citasQuery = query(
+        // ✅ FIX #17: anclar al mediodía + setHours para evitar bug de zona horaria
+        const baseDate = new Date(fechaStr + 'T12:00:00');
+        const inicioDia = new Date(baseDate);
+        inicioDia.setHours(0, 0, 0, 0);
+        const finDia = new Date(baseDate);
+        finDia.setHours(23, 59, 59, 999);
+
+        const citasSnap = await getDocs(query(
             collection(db, 'negocios', negocioId, 'citas'),
             where('fechaHora', '>=', inicioDia),
             where('fechaHora', '<=', finDia)
-        );
-        const citasSnap = await getDocs(citasQuery);
+        ));
 
-        // ✅ CORRECCIÓN BUG PRINCIPAL: incluir empleadoId en cada cita ocupada
         const ocupados = [];
         citasSnap.forEach(citaDoc => {
             const c = citaDoc.data();
@@ -342,11 +330,10 @@ async function cargarHorariosDisponibles(fechaStr) {
             ocupados.push({
                 inicio: fechaCita.getHours() * 60 + fechaCita.getMinutes(),
                 duracion: c.duracion || duracion,
-                empleadoId: c.empleadoId || null   // ← guardamos el empleado asignado
+                empleadoId: c.empleadoId || null
             });
         });
 
-        // Obtener la lista de empleados activos (para "Cualquiera")
         let empleadosActivosIds = [];
         if (!empleadoSeleccionado) {
             const empSnap = await getDocs(collection(db, 'negocios', negocioId, 'empleados'));
@@ -357,6 +344,7 @@ async function cargarHorariosDisponibles(fechaStr) {
 
         slotsContainer.innerHTML = '';
         let slotsGenerados = 0;
+
         for (let min = inicioMinutos; min < finMinutos; min += 30) {
             const slotFin = min + duracion;
             if (slotFin > finMinutos) break;
@@ -364,16 +352,13 @@ async function cargarHorariosDisponibles(fechaStr) {
             let slotDisponible = false;
 
             if (empleadoSeleccionado) {
-                // CASO 1: Empleado específico → solo bloquean las citas de ese empleado (o sin empleado)
                 const choca = ocupados.some(cita => {
                     const esMismoEmpleado = cita.empleadoId === empleadoSeleccionado.id || cita.empleadoId === null;
                     return esMismoEmpleado && (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
                 });
                 slotDisponible = !choca;
             } else {
-                // CASO 2: "Cualquiera" → al menos un empleado debe estar libre
                 if (empleadosActivosIds.length === 0) {
-                    // Sin empleados registrados → cualquier cita bloquea
                     const choca = ocupados.some(cita => (min < cita.inicio + cita.duracion && slotFin > cita.inicio));
                     slotDisponible = !choca;
                 } else {
@@ -382,18 +367,13 @@ async function cargarHorariosDisponibles(fechaStr) {
                             const esMismoEmpleado = cita.empleadoId === empId || cita.empleadoId === null;
                             return esMismoEmpleado && (min < cita.inicio + cita.duracion && slotFin > cita.inicio);
                         });
-                        if (!ocupadoEsteEmp) {
-                            slotDisponible = true;
-                            break;
-                        }
+                        if (!ocupadoEsteEmp) { slotDisponible = true; break; }
                     }
                 }
             }
 
             if (slotDisponible) {
-                const horas = Math.floor(min / 60);
-                const minutos = min % 60;
-                const horaStr = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
+                const horaStr = `${Math.floor(min / 60).toString().padStart(2, '0')}:${(min % 60).toString().padStart(2, '0')}`;
                 const slot = document.createElement('div');
                 slot.className = 'slot';
                 slot.textContent = horaStr;
@@ -407,13 +387,14 @@ async function cargarHorariosDisponibles(fechaStr) {
                 slotsGenerados++;
             }
         }
+
         if (slotsGenerados === 0) {
             slotsContainer.innerHTML = 'No hay horarios disponibles para esta fecha.';
         }
     } catch (error) {
         console.error('Error al cargar horarios:', error);
-        slotsContainer.innerHTML = `<p style="color: #b91c1c;">Error al cargar horarios: ${error.message}. 
-        <button id="retry-horarios" style="color: #4f46e5; text-decoration: underline; background: none; border: none; cursor: pointer;">Reintentar</button></p>`;
+        slotsContainer.innerHTML = `<p style="color:#b91c1c;">Error al cargar horarios: ${error.message}.
+        <button id="retry-horarios" style="color:#4f46e5;text-decoration:underline;background:none;border:none;cursor:pointer;">Reintentar</button></p>`;
         document.getElementById('retry-horarios')?.addEventListener('click', () => cargarHorariosDisponibles(fechaStr));
     } finally {
         cargandoHorarios = false;
@@ -432,42 +413,31 @@ document.getElementById('btn-volver-paso1').addEventListener('click', () => most
 document.getElementById('btn-siguiente-paso3').addEventListener('click', () => mostrarPaso(2));
 document.getElementById('btn-volver-paso2').addEventListener('click', () => mostrarPaso(1));
 
-// ==================== CONFIRMAR CITA (CORREGIDO) ====================
+// ==================== CONFIRMAR CITA ====================
 document.getElementById('form-cliente').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const nombre = document.getElementById('cliente-nombre').value.trim();
+    const nombre   = document.getElementById('cliente-nombre').value.trim();
     const telefono = document.getElementById('cliente-telefono').value.trim();
-    const email = document.getElementById('cliente-email').value.trim();
+    const email    = document.getElementById('cliente-email').value.trim();
 
-    // Validación: nombre y teléfono son obligatorios
-    if (!nombre) {
-        alert('El nombre es obligatorio.');
-        return;
-    }
-    if (!telefono) {
-        alert('El teléfono es obligatorio.');
-        return;
-    }
-    // Validación: si se proporciona correo, debe ser válido
+    if (!nombre)    { alert('El nombre es obligatorio.'); return; }
+    if (!telefono)  { alert('El teléfono es obligatorio.'); return; }
     if (email && !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
-        alert('El correo no es válido.');
-        return;
+        alert('El correo no es válido.'); return;
     }
 
     const fechaHora = new Date(`${fechaSeleccionada}T${horarioSeleccionado}:00`);
-
-    // ✅ CORRECCIÓN BUG SECUNDARIO: incluir duracion en citaData
     const citaData = {
-        clienteNombre: nombre,
-        clienteTelefono: telefono,
-        clienteEmail: email,
-        servicioId: servicioSeleccionado.id,
-        servicioNombre: servicioSeleccionado.nombre,
-        empleadoId: empleadoSeleccionado?.id || null,
-        duracion: servicioSeleccionado.duracion,  // ← guardamos la duración real del servicio
+        clienteNombre:    nombre,
+        clienteTelefono:  telefono,
+        clienteEmail:     email,
+        servicioId:       servicioSeleccionado.id,
+        servicioNombre:   servicioSeleccionado.nombre,
+        empleadoId:       empleadoSeleccionado?.id || null,
+        duracion:         servicioSeleccionado.duracion,
         fechaHora,
-        color: servicioSeleccionado.color || '#667eea',
-        estado: 'confirmada',
+        color:   servicioSeleccionado.color || '#667eea',
+        estado:  'confirmada',
         createdAt: new Date()
     };
 
@@ -478,7 +448,7 @@ document.getElementById('form-cliente').addEventListener('submit', async (e) => 
         mostrarPaso(3);
 
         const waNumero = datosNegocio.whatsapp || datosNegocio.telefono;
-        const mensaje = `Hola, confirmo mi cita: ${resumen}. Gracias.`;
+        const mensaje  = `Hola, confirmo mi cita: ${resumen}. Gracias.`;
         document.getElementById('btn-whatsapp').onclick = () => {
             window.open(`https://wa.me/${waNumero}?text=${encodeURIComponent(mensaje)}`, '_blank');
         };
@@ -489,17 +459,15 @@ document.getElementById('form-cliente').addEventListener('submit', async (e) => 
 
 // Nueva cita: reiniciar estado
 document.getElementById('btn-nueva-cita').addEventListener('click', () => {
-    servicioSeleccionado = null;
-    empleadoSeleccionado = null;
-    fechaSeleccionada = null;
-    horarioSeleccionado = null;
-    document.querySelectorAll('.seleccionado, .fc-day-today').forEach(el => el.classList.remove('seleccionado', 'fc-day-today'));
+    servicioSeleccionado  = null;
+    empleadoSeleccionado  = null;
+    fechaSeleccionada     = null;
+    horarioSeleccionado   = null;
+    document.querySelectorAll('.seleccionado, .fc-day-today')
+        .forEach(el => el.classList.remove('seleccionado', 'fc-day-today'));
     document.getElementById('btn-siguiente').disabled = true;
     document.getElementById('form-cliente').reset();
-    if (miniCalendario) {
-        miniCalendario.destroy();
-        miniCalendario = null;
-    }
+    if (miniCalendario) { miniCalendario.destroy(); miniCalendario = null; }
     mostrarPaso(0);
 });
 

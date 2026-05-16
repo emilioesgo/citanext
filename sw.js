@@ -27,17 +27,25 @@ const urlsToCache = [
 
 // Instalación: cachear recursos esenciales
 self.addEventListener('install', (event) => {
+  // ✅ FIX #14: Promise.allSettled en lugar de addAll (atómico)
+  // Una URL fallida (CDN caído, sin red) ya NO bloquea toda la instalación
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Cacheando recursos');
-        return cache.addAll(urlsToCache);
-      })
-      .catch((err) => console.log('Error al cachear:', err))
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('[SW] Cacheando recursos...');
+      return Promise.allSettled(
+        urlsToCache.map(url =>
+          cache.add(url).catch(err =>
+            console.warn(`[SW] No se pudo cachear: ${url}`, err)
+          )
+        )
+      );
+    })
   );
+  // Activa el nuevo SW inmediatamente sin esperar que se cierren las pestañas
+  self.skipWaiting();
 });
 
-// Activar: eliminar caches antiguos si se actualiza
+// Activar: eliminar caches antiguos y tomar control inmediato
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -45,6 +53,9 @@ self.addEventListener('activate', (event) => {
         cacheNames.filter((name) => name !== CACHE_NAME)
           .map((name) => caches.delete(name))
       );
+    }).then(() => {
+      // ✅ FIX #14: reclamar clientes activos para que el nuevo SW tome efecto de inmediato
+      return self.clients.claim();
     })
   );
 });

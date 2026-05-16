@@ -97,7 +97,7 @@
       <h2><i class="fa-solid fa-scissors"></i> Tus servicios</h2>
       <form id="form-servicio" class="inline-form">
         <input type="text" id="servicio-nombre" placeholder="Nombre del servicio" required>
-        <input type="number" id="servicio-duracion" placeholder="Minutos" required>
+        <input type="number" id="servicio-duracion" placeholder="Minutos (ej. 30)" min="1" max="480" required>
         <input type="number" id="servicio-precio" placeholder="Precio" required>
         <input type="color" id="servicio-color" value="#667eea">
         <button type="submit" class="btn-primary"><i class="fa-solid fa-plus"></i> Agregar</button>
@@ -159,7 +159,7 @@
       <div class="input-group">
         <label>Identificador único (slug)</label>
         <div style="display:flex; gap:10px;">
-          <input type="text" id="slug-input" placeholder="ej. estetica-bella" pattern="[a-zA-Z0-9\-]{3,30}" style="flex:1;">
+          <input type="text" id="slug-input" placeholder="ej. estetica-bella" pattern="[a-z0-9\-]{3,30}" style="flex:1;">
           <button type="button" id="btn-guardar-slug" class="btn-primary" style="width:auto;"><i class="fa-solid fa-check"></i> Guardar</button>
         </div>
         <small>Solo letras, números y guiones. Mínimo 3 caracteres.</small>

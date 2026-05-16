@@ -1,6 +1,6 @@
 import { auth, db, storage } from './firebase-config.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, deleteDoc, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { doc, getDoc, updateDoc, setDoc, collection, addDoc, getDocs, deleteDoc, query, where, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 /* ---------------------------------------------------------------------------
@@ -12,6 +12,7 @@ let calendarioCitas = null;
 let nombreNegocio = 'Mi Negocio';
 let totalEmpleadosActivos = 1;
 let inicializandoCalendario = false;
+let _debounceDisponibilidad = null; // Fix #7: evita múltiples reads de Firestore
 
 const DIAS_SEMANA = ['lun', 'mar', 'mie', 'jue', 'vie', 'sab', 'dom'];
 const NOMBRES_DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -23,6 +24,57 @@ function escaparHTML(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+/* ---------------------------------------------------------------------------
+   HELPERS PARA BLOQUEOS DE CITAS (Fix #5)
+   --------------------------------------------------------------------------- */
+function crearIdBloqueoLocal(fechaHora, offsetMinutos, empleadoId) {
+  const fecha = new Date(fechaHora.getTime() + offsetMinutos * 60000);
+  const pad = (v) => String(v).padStart(2, '0');
+  const fechaId = [fecha.getFullYear(), pad(fecha.getMonth() + 1), pad(fecha.getDate())].join('');
+  const horaId = `${pad(fecha.getHours())}${pad(fecha.getMinutes())}`;
+  return `${fechaId}-${horaId}-${empleadoId || 'negocio'}`;
+}
+
+function obtenerRefsBloqueoLocal(fechaHora, duracion, empleadoId) {
+  const refs = [];
+  for (let offset = 0; offset < duracion; offset += 30) {
+    refs.push(doc(db, 'negocios', uid, 'bloqueosCitas',
+      crearIdBloqueoLocal(fechaHora, offset, empleadoId)));
+  }
+  return refs;
+}
+
+// ✅ FIX #6: verifica si un horario está libre para el empleado dado
+async function verificarSlotDisponible(fechaHora, duracion, empleadoId, citaIgnorarId) {
+  const inicioNuevo = fechaHora.getTime();
+  const finNuevo   = inicioNuevo + duracion * 60000;
+  const inicioDia  = new Date(fechaHora);
+  inicioDia.setHours(0, 0, 0, 0);
+  const finDia = new Date(fechaHora);
+  finDia.setHours(23, 59, 59, 999);
+
+  const snap = await getDocs(query(
+    collection(db, 'negocios', uid, 'citas'),
+    where('fechaHora', '>=', inicioDia),
+    where('fechaHora', '<=', finDia)
+  ));
+
+  // Devuelve true si el slot está libre (sin conflictos)
+  return !snap.docs.some(citaDoc => {
+    if (citaDoc.id === citaIgnorarId) return false; // ignorar la propia cita
+    const cita = citaDoc.data();
+    if (cita.estado === 'cancelada') return false;
+    const inicioExistente = cita.fechaHora.toDate().getTime();
+    const finExistente    = inicioExistente + (cita.duracion || 30) * 60000;
+    const hayChoque = inicioNuevo < finExistente && finNuevo > inicioExistente;
+    if (!hayChoque) return false;
+    // Hay choque de horario → comprobar si es el mismo empleado
+    const empExistente = cita.empleadoId || null;
+    if (!empleadoId) return true;          // sin empleado asignado → bloquea todo
+    return empExistente === empleadoId || empExistente === null;
+  });
 }
 
 /* ---------------------------------------------------------------------------
@@ -60,7 +112,9 @@ document.querySelectorAll('.tab').forEach(btn => {
       if (calendarioCitas) {
         requestAnimationFrame(() => {
           calendarioCitas.updateSize();
-          actualizarDisponibilidadCalendario();
+          // ✅ FIX #7: debounce al cambiar de pestaña rápidamente
+          clearTimeout(_debounceDisponibilidad);
+          _debounceDisponibilidad = setTimeout(() => actualizarDisponibilidadCalendario(), 300);
         });
       } else if (!inicializandoCalendario) {
         inicializarCalendarioCitas();
@@ -251,6 +305,8 @@ async function cargarServicios() {
 }
 
 async function eliminarServicio(id) {
+  // ✅ FIX #11: pedir confirmación antes de borrar (igual que eliminarEmpleado)
+  if (!confirm('¿Eliminar este servicio? Esta acción no se puede deshacer.')) return;
   try {
     await deleteDoc(doc(db, 'negocios', uid, 'servicios', id));
     cargarServicios();
@@ -264,10 +320,18 @@ document.getElementById('form-servicio').addEventListener('submit', async (e) =>
   e.preventDefault();
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   try {
-    const nombre = document.getElementById('servicio-nombre').value;
+    const nombre = document.getElementById('servicio-nombre').value.trim();
     const duracion = parseInt(document.getElementById('servicio-duracion').value);
     const precio = parseFloat(document.getElementById('servicio-precio').value);
     const color = document.getElementById('servicio-color').value;
+    // ✅ FIX #8: validar duración y precio antes de guardar
+    if (!nombre) return alert('El nombre del servicio es obligatorio.');
+    if (!Number.isInteger(duracion) || duracion < 1 || duracion > 480) {
+      return alert('La duración debe ser un número entre 1 y 480 minutos.');
+    }
+    if (!Number.isFinite(precio) || precio < 0) {
+      return alert('El precio no es válido. Debe ser un número mayor o igual a 0.');
+    }
     await addDoc(collection(db, 'negocios', uid, 'servicios'), { nombre, duracion, precio, color });
     e.target.reset();
     cargarServicios();
@@ -476,7 +540,9 @@ function inicializarCalendarioCitas() {
       if (calendarioCitas) {
         requestAnimationFrame(() => {
           calendarioCitas.updateSize();
-          actualizarDisponibilidadCalendario();
+          // ✅ FIX #7: debounce en navegación de mes (evita N reads al hacer click rápido)
+          clearTimeout(_debounceDisponibilidad);
+          _debounceDisponibilidad = setTimeout(() => actualizarDisponibilidadCalendario(), 300);
         });
       }
     }
@@ -622,10 +688,25 @@ function abrirCitasDelDia(fecha) {
       btnCancelar.className = 'btn-xs btn-cancelar';
       btnCancelar.setAttribute('data-id', docSnap.id);
       btnCancelar.textContent = '❌ Cancelar';
-      btnCancelar.onclick = async (e) => {
+      btnCancelar.onclick = async () => {
         if (confirm('¿Cancelar esta cita?')) {
           try {
-            await deleteDoc(doc(db, 'negocios', uid, 'citas', e.target.dataset.id));
+            const citaId = docSnap.id;
+            const citaRef = doc(db, 'negocios', uid, 'citas', citaId);
+            // ✅ FIX #5: leer datos antes de borrar para limpiar bloqueos
+            const citaSnap = await getDoc(citaRef);
+            const citaData = citaSnap.data();
+            const batch = writeBatch(db);
+            batch.delete(citaRef);
+            if (citaData) {
+              const bloqueoRefs = obtenerRefsBloqueoLocal(
+                citaData.fechaHora.toDate(),
+                citaData.duracion || 30,
+                citaData.empleadoId || null
+              );
+              bloqueoRefs.forEach(ref => batch.delete(ref));
+            }
+            await batch.commit();
             abrirCitasDelDia(fecha);
             actualizarDisponibilidadCalendario();
           } catch (error) {
@@ -640,7 +721,7 @@ function abrirCitasDelDia(fecha) {
       btnReprogramar.className = 'btn-xs btn-reprogramar';
       btnReprogramar.setAttribute('data-id', docSnap.id);
       btnReprogramar.textContent = '🔄 Reprogramar';
-      btnReprogramar.onclick = async (e) => {
+      btnReprogramar.onclick = async () => {
         const nuevaFecha = prompt('Introduce nueva fecha y hora (YYYY-MM-DD HH:MM)');
         if (nuevaFecha) {
           const fechaValida = new Date(nuevaFecha);
@@ -649,15 +730,43 @@ function abrirCitasDelDia(fecha) {
             return;
           }
           try {
-            const docRef = doc(db, 'negocios', uid, 'citas', e.target.dataset.id);
-            const docSnap = await getDoc(docRef);
-            const citaOriginal = docSnap.data();
-            // Preservamos la duración original al reprogramar
-            await updateDoc(docRef, {
-              fechaHora: fechaValida,
-              empleadoId: citaOriginal.empleadoId || null,
-              duracion: citaOriginal.duracion || 30
-            });
+            const citaId = docSnap.id;
+            const citaRef = doc(db, 'negocios', uid, 'citas', citaId);
+            const citaSnap = await getDoc(citaRef);
+            const citaOriginal = citaSnap.data();
+            const duracion = citaOriginal.duracion || 30;
+            const empleadoId = citaOriginal.empleadoId || null;
+
+            // ✅ FIX #6: verificar disponibilidad ANTES de tocar nada
+            const slotLibre = await verificarSlotDisponible(
+              fechaValida, duracion, empleadoId, citaId
+            );
+            if (!slotLibre) {
+              alert('Ese horario ya está ocupado. Elige otra fecha u hora.');
+              return;
+            }
+
+            // ✅ FIX #5: batch que limpia bloqueos viejos y crea los nuevos
+            const batch = writeBatch(db);
+
+            // 1. Eliminar bloqueos del horario original
+            obtenerRefsBloqueoLocal(citaOriginal.fechaHora.toDate(), duracion, empleadoId)
+              .forEach(ref => batch.delete(ref));
+
+            // 2. Actualizar la cita
+            batch.update(citaRef, { fechaHora: fechaValida, empleadoId, duracion });
+
+            // 3. Crear bloqueos para el nuevo horario
+            obtenerRefsBloqueoLocal(fechaValida, duracion, empleadoId)
+              .forEach(ref => batch.set(ref, {
+                citaId,
+                empleadoId,
+                fechaHora: fechaValida,
+                duracion,
+                createdAt: new Date()
+              }));
+
+            await batch.commit();
             abrirCitasDelDia(fecha);
             actualizarDisponibilidadCalendario();
           } catch (error) {
@@ -721,6 +830,8 @@ document.getElementById('btn-guardar-slug').addEventListener('click', async () =
   if (!uid) return alert('Sesión no iniciada. Recarga la página.');
   const slugInput = document.getElementById('slug-input');
   let slug = slugInput.value.trim().toLowerCase();
+  // ✅ FIX #13: sincronizar el campo con el valor en minúsculas
+  slugInput.value = slug;
   if (slug === '') {
     await updateDoc(doc(db, 'negocios', uid), { slug: '' });
     actualizarEnlaceMostrado('');
@@ -749,6 +860,13 @@ document.getElementById('btn-guardar-slug').addEventListener('click', async () =
 document.getElementById('copiar-enlace')?.addEventListener('click', () => {
   const enlace = document.getElementById('enlace-publico').value;
   navigator.clipboard.writeText(enlace).then(() => alert('Enlace copiado'));
+});
+
+// ✅ FIX #13: auto-convertir a minúsculas mientras el usuario escribe en el slug
+document.getElementById('slug-input')?.addEventListener('input', (e) => {
+  const pos = e.target.selectionStart;
+  e.target.value = e.target.value.toLowerCase();
+  e.target.setSelectionRange(pos, pos);
 });
 
 document.getElementById('btn-compartir')?.addEventListener('click', () => {
@@ -781,7 +899,9 @@ const tabObserver = new MutationObserver(() => {
     if (calendarioCitas) {
       requestAnimationFrame(() => {
         calendarioCitas.updateSize();
-        actualizarDisponibilidadCalendario();
+        // ✅ FIX #7: debounce en MutationObserver
+        clearTimeout(_debounceDisponibilidad);
+        _debounceDisponibilidad = setTimeout(() => actualizarDisponibilidadCalendario(), 300);
       });
     } else if (!inicializandoCalendario) {
       inicializarCalendarioCitas();

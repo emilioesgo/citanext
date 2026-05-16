@@ -217,13 +217,25 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
     return;
   }
 
-  const servicioSnap = await getDoc(doc(db, 'negocios', uid, 'servicios', servicioId));
-  const servicioData = servicioSnap.data();
-  const duracion = servicioData ? (servicioData.duracion || 30) : 30;
-
+  // ✅ FIX #16: 3 reads independientes en paralelo → ~50% menos latencia
   const fecha = new Date(fechaStr + 'T12:00:00');
   const diaSem = ['dom','lun','mar','mie','jue','vie','sab'][fecha.getDay()];
-  const negocioSnap = await getDoc(doc(db, 'negocios', uid));
+  const inicioDia = new Date(fechaStr + 'T00:00:00');
+  const finDia = new Date(fechaStr + 'T23:59:59');
+  const citasQuery = query(
+    collection(db, 'negocios', uid, 'citas'),
+    where('fechaHora', '>=', inicioDia),
+    where('fechaHora', '<=', finDia)
+  );
+
+  const [servicioSnap, negocioSnap, citasSnap] = await Promise.all([
+    getDoc(doc(db, 'negocios', uid, 'servicios', servicioId)),
+    getDoc(doc(db, 'negocios', uid)),
+    getDocs(citasQuery)
+  ]);
+
+  const servicioData = servicioSnap.data();
+  const duracion = servicioData ? (servicioData.duracion || 30) : 30;
   const negocioData = negocioSnap.data() || {};
   const horarioNegocio = (negocioData.horario || {})[diaSem] || { abierto: true, inicio: '09:00', fin: '18:00' };
   if (!horarioNegocio.abierto) {
@@ -235,15 +247,6 @@ async function cargarSlotsDisponibles(fechaStr, horaPreselecta = null) {
   const [hFin, mFin] = horarioNegocio.fin.split(':').map(Number);
   const inicioMinutos = hIni * 60 + mIni;
   const finMinutos = hFin * 60 + mFin;
-
-  const inicioDia = new Date(fechaStr + 'T00:00:00');
-  const finDia = new Date(fechaStr + 'T23:59:59');
-  const citasQuery = query(
-    collection(db, 'negocios', uid, 'citas'),
-    where('fechaHora', '>=', inicioDia),
-    where('fechaHora', '<=', finDia)
-  );
-  const citasSnap = await getDocs(citasQuery);
 
   const empleadoIdSeleccionado = document.getElementById('cita-empleado').value || null;
 
